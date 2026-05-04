@@ -27,7 +27,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const DART_API_KEY = process.env.DART_API_KEY || '';
 const GEMINI_KEY   = process.env.GEMINI_KEY   || '';
-const GEMINI_MODEL = 'gemma-4-31b-it';
+const GEMINI_MODEL = 'gemma-4-26b-a4b-it';
 
 let corpList = [];
 

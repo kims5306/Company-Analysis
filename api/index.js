@@ -8,7 +8,7 @@ const url   = require('url');
 // API 키는 환경변수에서만 로드 (Vercel 환경변수 또는 로컬 .env)
 const DART_API_KEY = process.env.DART_API_KEY || '';
 const GEMINI_KEY   = process.env.GEMINI_KEY   || '';
-const GEMINI_MODEL = 'gemma-4-31b-it';
+const GEMINI_MODEL = 'gemma-4-26b-a4b-it';
 
 // corp.xml은 프로젝트 루트에 위치
 const XML_PATH = path.join(process.cwd(), 'corp.xml');
@@ -214,7 +214,7 @@ function callGemini(model, prompt) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
+      generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
     });
     const options = {
       hostname: 'generativelanguage.googleapis.com',
