@@ -4,13 +4,30 @@ const fs = require('fs');
 const path = require('path');
 const url = require('url');
 
+// .env 파일이 있으면 로드 (로컬 개발용, npm dotenv 없이 동작)
+(function loadEnv() {
+  try {
+    const envPath = path.join(__dirname, '.env');
+    const content = fs.readFileSync(envPath, 'utf8');
+    content.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) return;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx < 1) return;
+      const key = trimmed.slice(0, eqIdx).trim();
+      const val = trimmed.slice(eqIdx + 1).trim();
+      if (key && !(key in process.env)) process.env[key] = val;
+    });
+  } catch (_) { /* .env 없으면 무시 */ }
+})();
+
 const PORT = 3000;
 const XML_PATH = path.join(__dirname, 'corp.xml');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
-const DART_API_KEY   = '61931ccdab282ba49de49f8db6d63db5e99d7a4b';
-const GEMINI_KEY     = 'AIzaSyCfDdXUA6chgkzOZZ9kbjVzUxfTi8IYtIU';
-const GEMINI_MODEL   = 'gemini-2.5-flash';
+const DART_API_KEY = process.env.DART_API_KEY || '';
+const GEMINI_KEY   = process.env.GEMINI_KEY   || '';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 let corpList = [];
 

@@ -5,9 +5,9 @@ const fs    = require('fs');
 const path  = require('path');
 const url   = require('url');
 
-// ── 환경변수 우선, 없으면 하드코딩 값 사용
-const DART_API_KEY = process.env.DART_API_KEY || '61931ccdab282ba49de49f8db6d63db5e99d7a4b';
-const GEMINI_KEY   = process.env.GEMINI_KEY   || 'AIzaSyCfDdXUA6chGkzOZZ9kbjVzUxfTi8IYtIU';
+// API 키는 환경변수에서만 로드 (Vercel 환경변수 또는 로컬 .env)
+const DART_API_KEY = process.env.DART_API_KEY || '';
+const GEMINI_KEY   = process.env.GEMINI_KEY   || '';
 const GEMINI_MODEL = 'gemini-2.5-flash';
 
 // corp.xml은 프로젝트 루트에 위치
