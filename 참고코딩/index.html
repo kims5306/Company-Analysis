@@ -1,0 +1,3502 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DI 동일 (001530) 데이터 시각화</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        min-height: 100vh;
+        color: #333;
+        line-height: 1.6;
+      }
+
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 20px;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      }
+
+      .header {
+        background: white;
+        color: #2c3e50;
+        padding: 40px 30px;
+        border-radius: 20px;
+        text-align: center;
+        margin-bottom: 30px;
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+        border: 2px solid #e8e8e8;
+      }
+
+      .header h1 {
+        font-size: 3em;
+        font-weight: 300;
+        margin-bottom: 10px;
+        text-shadow: none;
+        color: #2c3e50;
+      }
+
+      .header p {
+        font-size: 1.2em;
+        opacity: 0.8;
+        color: #555;
+      }
+
+      .badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+        color: white;
+        padding: 8px 20px;
+        border-radius: 25px;
+        font-size: 0.9em;
+        font-weight: bold;
+        margin-top: 15px;
+        box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 25px;
+        margin: 30px 0;
+      }
+
+      .stat-card {
+        background: white;
+        padding: 25px;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        transition: all 0.3s ease;
+      }
+
+      .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+      }
+
+      .stat-label {
+        color: #7f8c8d;
+        font-size: 0.9em;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 10px;
+        font-weight: 600;
+      }
+
+      .stat-value {
+        font-size: 2.2em;
+        font-weight: bold;
+        color: #2c3e50;
+        margin: 10px 0;
+      }
+
+      .controls {
+        text-align: center;
+        margin: 40px 0;
+      }
+
+      .btn {
+        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+        color: white;
+        border: none;
+        padding: 15px 30px;
+        margin: 8px;
+        border-radius: 30px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+      }
+
+      .btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
+      }
+
+      .btn.active {
+        background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+        box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+      }
+
+      .chart-container {
+        background: white;
+        padding: 30px;
+        border-radius: 20px;
+        margin: 20px 0;
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+      }
+
+      .chart-title {
+        font-size: 1.8em;
+        color: #2c3e50;
+        margin-bottom: 25px;
+        text-align: center;
+        font-weight: 400;
+      }
+
+      .chart-wrapper {
+        position: relative;
+        height: 450px;
+        margin-bottom: 20px;
+      }
+
+      .footer {
+        background: rgba(44, 62, 80, 0.9);
+        color: white;
+        text-align: center;
+        padding: 25px;
+        border-radius: 15px;
+        margin-top: 40px;
+      }
+
+      /* AI 분석 스타일 */
+      .ai-analysis-container {
+        background: white;
+        border-radius: 15px;
+        padding: 30px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        border: 2px solid #e8e8e8;
+      }
+
+      .analysis-loading {
+        text-align: center;
+        padding: 40px;
+      }
+
+      .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #8e44ad;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .analysis-content {
+        animation: fadeIn 0.8s ease-in;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .analysis-section {
+        margin-bottom: 30px;
+        padding: 25px;
+        background: #f8f9fa;
+        border-radius: 12px;
+        border-left: 5px solid #8e44ad;
+      }
+
+      .analysis-section h3 {
+        color: #8e44ad;
+        margin-bottom: 15px;
+        font-size: 1.3em;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .analysis-section p {
+        line-height: 1.6;
+        color: #2c3e50;
+        margin-bottom: 10px;
+      }
+
+      .signal-indicator {
+        display: inline-block;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 0.9em;
+        margin: 5px;
+      }
+
+      .signal-buy {
+        background: #e8f5e8;
+        color: #27ae60;
+        border: 2px solid #27ae60;
+      }
+      .signal-sell {
+        background: #fdf2f2;
+        color: #e74c3c;
+        border: 2px solid #e74c3c;
+      }
+      .signal-hold {
+        background: #fff3cd;
+        color: #856404;
+        border: 2px solid #ffc107;
+      }
+
+      .news-item {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        border-left: 4px solid #3498db;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      .news-title {
+        font-weight: bold;
+        color: #2c3e50;
+        margin-bottom: 8px;
+        font-size: 1.1em;
+      }
+
+      .news-title a {
+        color: #2c3e50;
+        text-decoration: none;
+        transition: color 0.3s ease;
+      }
+
+      .news-title a:hover {
+        color: #3498db;
+        text-decoration: underline;
+      }
+
+      .news-summary {
+        color: #555;
+        font-size: 0.95em;
+        line-height: 1.5;
+      }
+
+      .news-date {
+        color: #999;
+        font-size: 0.85em;
+        margin-top: 8px;
+      }
+
+      @media (max-width: 768px) {
+        .header h1 {
+          font-size: 2em;
+        }
+        .chart-wrapper {
+          height: 350px;
+        }
+        .stats-grid {
+          grid-template-columns: repeat(2, 1fr);
+          gap: 15px;
+        }
+        .stat-card {
+          padding: 20px;
+        }
+        .stat-value {
+          font-size: 1.8em;
+        }
+        .btn {
+          padding: 12px 20px;
+          font-size: 14px;
+        }
+      }
+
+      .chart-section {
+        animation: fadeIn 0.5s ease-in-out;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>
+          <img
+            src="CI.png"
+            alt="DI"
+            style="
+              height: 85px;
+              width: 105px;
+              margin-right: 35px;
+              vertical-align: middle;
+            "
+          />
+          <p
+            style="
+              font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+              font-weight: 700;
+              letter-spacing: 0.5px;
+            "
+          >
+            DI 동일 (001530)
+          </p>
+        </h1>
+        <p
+          style="
+            font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+          "
+        >
+          실시간 주식 데이터 시각화 대시보드
+        </p>
+        <button
+          id="updateBtn"
+          onclick="updateData()"
+          style="
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 15px 10px 0 0;
+            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+            transition: all 0.3s ease;
+          "
+          onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(52, 152, 219, 0.4)'"
+          onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(52, 152, 219, 0.3)'"
+        >
+          🔄 데이터 업데이트
+        </button>
+        <div class="badge">
+          ✨ 가격 및 지표 + 거래량 + MACD + RCI + 외국인보유율
+        </div>
+      </div>
+
+      <div class="stats-grid" id="statsGrid"></div>
+
+      <div class="controls">
+        <button class="btn active" onclick="showChart('price')">
+          📈 가격 차트
+        </button>
+        <button class="btn" onclick="showChart('volume')">
+          📊 거래량 차트
+        </button>
+        <button class="btn" onclick="showChart('macd')">📈 MACD 차트</button>
+        <button class="btn" onclick="showChart('rci')">📊 RCI 차트</button>
+        <button class="btn" onclick="showChart('foreign')">
+          🌍 외국인 보유율
+        </button>
+        <button class="btn" onclick="showChart('all')">📋 전체 보기</button>
+        <button class="btn" onclick="showDiscussion()">💬 토론방 분석</button>
+        <button
+          class="btn ai-analysis-btn"
+          onclick="showAIAnalysis()"
+          style="
+            background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
+            margin-left: 10px;
+          "
+        >
+          🤖 AI 주가 분석
+        </button>
+      </div>
+
+      <div class="chart-container">
+        <div id="priceChart" class="chart-section">
+          <div class="chart-title">
+            📈 주가 추이 + 이동평균선 + 일목균형표 (구름대)
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="candlestickChart"></canvas>
+          </div>
+        </div>
+
+        <div id="volumeChart" class="chart-section" style="display: none">
+          <div class="chart-title">📊 일별 거래량</div>
+          <div class="chart-wrapper">
+            <canvas id="volumeChartCanvas"></canvas>
+          </div>
+        </div>
+
+        <div id="macdChart" class="chart-section" style="display: none">
+          <div class="chart-title">📈 MACD 오실레이터 (12,26,9)</div>
+          <div class="chart-wrapper">
+            <canvas id="macdChartCanvas"></canvas>
+          </div>
+        </div>
+
+        <div id="rciChart" class="chart-section" style="display: none">
+          <div class="chart-title">📊 RCI 차트 (9,13,18,26)</div>
+          <div class="chart-wrapper">
+            <canvas id="rciChartCanvas"></canvas>
+          </div>
+        </div>
+
+        <div id="foreignChart" class="chart-section" style="display: none">
+          <div class="chart-title">🌍 외국인 보유율 변화</div>
+          <div class="chart-wrapper">
+            <canvas id="foreignChartCanvas"></canvas>
+          </div>
+        </div>
+
+        <!-- 토론방 분석 섹션 -->
+        <div id="discussionSection" class="chart-section" style="display: none">
+          <div class="chart-title">
+            💬 토론방 핵심 키워드 워드클라우드 (최근 1개월)
+          </div>
+          <div class="chart-wrapper" style="height: 420px">
+            <div id="wordCloud" style="width: 100%; height: 100%"></div>
+          </div>
+          <div class="chart-title" style="margin-top: 18px">
+            🆕 최근 이슈 토론 (최근 3개)
+          </div>
+          <div
+            id="latestDiscussions"
+            style="
+              background: white;
+              border-radius: 12px;
+              padding: 16px;
+              border: 2px solid #e8e8e8;
+            "
+          ></div>
+        </div>
+
+        <!-- AI 분석 섹션 -->
+        <div id="aiAnalysisSection" class="chart-section" style="display: none">
+          <div class="chart-title">🤖 AI 주가 분석 리포트</div>
+          <div class="ai-analysis-container">
+            <div class="analysis-loading" id="analysisLoading">
+              <div class="spinner"></div>
+              <p>📊 차트 데이터 분석 중...</p>
+              <p>🔤 DI동일 핵심 키워드 분석 중...</p>
+              <p>📈 기술적 지표 종합 평가 중...</p>
+              <p>🤖 AI 종합 분석 리포트 생성 중...</p>
+            </div>
+            <div
+              class="analysis-content"
+              id="analysisContent"
+              style="display: none"
+            >
+              <!-- 분석 결과가 여기에 동적으로 생성됩니다 -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <p>© 2025 DI 주식 시각화 도구 | 네이버 금융 API 기반 | Make by Bjkim</p>
+      </div>
+    </div>
+
+    <script>
+      // API 기본 경로 자동 감지: 파일로 직접 열었을 경우 로컬 서버로 우회
+      const API_BASE =
+        location.protocol === "file:" ? "http://localhost:8000" : "";
+      // 워드클라우드 라이브러리
+      const scriptWc = document.createElement("script");
+      scriptWc.src =
+        "https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js";
+      document.head.appendChild(scriptWc);
+
+      // 🎯 DI 주식 데이터 (실시간 업데이트)
+      let stockData = [];
+      let lastUpdateTime = null;
+
+      // 실시간 데이터 로딩 함수
+      async function loadStockData() {
+        try {
+          const response = await fetch(`${API_BASE}/api/stock-data`);
+          const result = await response.json();
+
+          if (result.data && result.data.priceInfos) {
+            stockData = result.data.priceInfos;
+            lastUpdateTime = result.last_update;
+            console.log(
+              `✅ 실시간 데이터 로드 완료: ${stockData.length}개 데이터 포인트`
+            );
+            console.log(`📅 마지막 업데이트: ${lastUpdateTime}`);
+            return true;
+          } else {
+            console.error("❌ 데이터 형식이 올바르지 않습니다.");
+            return false;
+          }
+        } catch (error) {
+          console.error("❌ 데이터 로드 실패:", error);
+          return false;
+        }
+      }
+
+      // 수동 업데이트 함수
+      async function updateData() {
+        const updateBtn = document.getElementById("updateBtn");
+        if (updateBtn) {
+          updateBtn.textContent = "🔄 업데이트 중...";
+          updateBtn.disabled = true;
+        }
+
+        try {
+          const response = await fetch(`${API_BASE}/api/update`);
+          const result = await response.json();
+
+          if (result.success) {
+            await loadStockData();
+            initializeStats();
+            updateCharts();
+            showNotification(
+              "✅ 데이터가 성공적으로 업데이트되었습니다!",
+              "success"
+            );
+          } else {
+            showNotification("❌ 데이터 업데이트에 실패했습니다.", "error");
+          }
+        } catch (error) {
+          console.error("업데이트 오류:", error);
+          showNotification("❌ 업데이트 중 오류가 발생했습니다.", "error");
+        } finally {
+          if (updateBtn) {
+            updateBtn.textContent = "🔄 데이터 업데이트";
+            updateBtn.disabled = false;
+          }
+        }
+      }
+
+      // 알림 표시 함수
+      function showNotification(message, type = "info") {
+        const notification = document.createElement("div");
+        notification.style.cssText = `
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          padding: 15px 20px;
+          border-radius: 8px;
+          color: white;
+          font-weight: bold;
+          z-index: 1000;
+          animation: slideIn 0.3s ease-out;
+          background: ${
+            type === "success"
+              ? "#27ae60"
+              : type === "error"
+              ? "#e74c3c"
+              : "#3498db"
+          };
+        `;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+          notification.remove();
+        }, 3000);
+      }
+
+      // 차트 업데이트 함수
+      function updateCharts() {
+        if (charts.price) {
+          charts.price.destroy();
+        }
+        if (charts.volume) {
+          charts.volume.destroy();
+        }
+        if (charts.macd) {
+          charts.macd.destroy();
+        }
+        if (charts.rci) {
+          charts.rci.destroy();
+        }
+        if (charts.foreign) {
+          charts.foreign.destroy();
+        }
+
+        createPriceChart();
+        createVolumeChart();
+        createMACDChart();
+        createRCIChart();
+        createForeignChart();
+      }
+
+      async function showDiscussion() {
+        // 섹션 토글
+        document.getElementById("priceChart").style.display = "none";
+        document.getElementById("volumeChart").style.display = "none";
+        document.getElementById("macdChart").style.display = "none";
+        document.getElementById("rciChart").style.display = "none";
+        document.getElementById("foreignChart").style.display = "none";
+        document.getElementById("aiAnalysisSection").style.display = "none";
+        document.getElementById("discussionSection").style.display = "block";
+
+        try {
+          const resp = await fetch(`${API_BASE}/api/discussion`);
+          const data = await resp.json();
+          if (!data.success) {
+            showNotification("❌ 토론방 키워드 수집 실패", "error");
+            return;
+          }
+          // data.keywords: [[word, weight], ...]
+          const list = data.keywords.length
+            ? data.keywords
+            : [["데이터없음", 1]];
+          // wordcloud2가 로드될 때까지 대기
+          await new Promise((r) => {
+            if (window.WordCloud) return r();
+            scriptWc.onload = () => r();
+            setTimeout(() => r(), 1500);
+          });
+          const canvasContainer = document.getElementById("wordCloud");
+          window.WordCloud(canvasContainer, {
+            list,
+            gridSize: Math.round(16 * (canvasContainer.offsetWidth / 1024)),
+            weightFactor: 2,
+            origin: [
+              canvasContainer.offsetWidth / 2,
+              canvasContainer.offsetHeight / 2,
+            ],
+            backgroundColor: "#ffffff",
+            color: () => "#8e44ad",
+            rotateRatio: 0,
+            ellipticity: 0.65,
+            drawOutOfBound: false,
+          });
+
+          // 최근 이슈 토론 3개 표시
+          const latestWrap = document.getElementById("latestDiscussions");
+          const latest = Array.isArray(data.latestPosts)
+            ? data.latestPosts.slice(0, 3)
+            : [];
+          if (!latest.length) {
+            latestWrap.innerHTML =
+              '<p style="color:#888; margin:0;">최근 글이 없습니다.</p>';
+          } else {
+            // 안전하게 DOM으로 생성
+            latestWrap.innerHTML = "";
+            latest.forEach(function (p) {
+              var a = document.createElement("a");
+              a.href = p.url || "#";
+              a.target = "_blank";
+              a.style.textDecoration = "none";
+
+              var box = document.createElement("div");
+              box.style.padding = "12px 10px";
+              box.style.borderBottom = "1px solid #eee";
+
+              var title = document.createElement("div");
+              title.style.fontWeight = "700";
+              title.style.color = "#2c3e50";
+              title.textContent = p.title || "(제목 없음)";
+
+              var content = document.createElement("div");
+              content.style.color = "#555";
+              content.style.marginTop = "6px";
+              content.style.whiteSpace = "pre-wrap";
+              var plain = (p.content || "").replace(
+                /<br\s*\/?>(\r\n|\n|\r)?/gi,
+                " "
+              );
+              if (plain.length > 180) {
+                content.textContent = plain.slice(0, 180) + "...";
+              } else {
+                content.textContent = plain;
+              }
+
+              var time = document.createElement("div");
+              time.style.color = "#999";
+              time.style.fontSize = "12px";
+              time.style.marginTop = "6px";
+              time.textContent = p.writtenAt || "";
+
+              box.appendChild(title);
+              box.appendChild(content);
+              box.appendChild(time);
+              a.appendChild(box);
+              latestWrap.appendChild(a);
+            });
+          }
+        } catch (e) {
+          console.error("토론방 로딩 오류", e);
+          showNotification("❌ 토론방 로딩 중 오류", "error");
+        }
+      }
+
+      // 하드코딩된 데이터 (백업용)
+      const backupData = [
+        {
+          localDate: "20250328",
+          closePrice: 48200.0,
+          openPrice: 47050.0,
+          highPrice: 48750.0,
+          lowPrice: 46000.0,
+          accumulatedTradingVolume: 165612,
+          foreignRetentionRate: 9.28,
+        },
+        {
+          localDate: "20250331",
+          closePrice: 46800.0,
+          openPrice: 48000.0,
+          highPrice: 48000.0,
+          lowPrice: 45450.0,
+          accumulatedTradingVolume: 100457,
+          foreignRetentionRate: 8.93,
+        },
+        {
+          localDate: "20250401",
+          closePrice: 46750.0,
+          openPrice: 46500.0,
+          highPrice: 46750.0,
+          lowPrice: 45450.0,
+          accumulatedTradingVolume: 93507,
+          foreignRetentionRate: 8.72,
+        },
+        {
+          localDate: "20250402",
+          closePrice: 46500.0,
+          openPrice: 46550.0,
+          highPrice: 46900.0,
+          lowPrice: 45750.0,
+          accumulatedTradingVolume: 39580,
+          foreignRetentionRate: 8.64,
+        },
+        {
+          localDate: "20250403",
+          closePrice: 46350.0,
+          openPrice: 46400.0,
+          highPrice: 46450.0,
+          lowPrice: 45400.0,
+          accumulatedTradingVolume: 36570,
+          foreignRetentionRate: 8.55,
+        },
+        {
+          localDate: "20250404",
+          closePrice: 44850.0,
+          openPrice: 45550.0,
+          highPrice: 46350.0,
+          lowPrice: 43000.0,
+          accumulatedTradingVolume: 89216,
+          foreignRetentionRate: 8.39,
+        },
+        {
+          localDate: "20250407",
+          closePrice: 43050.0,
+          openPrice: 43000.0,
+          highPrice: 44650.0,
+          lowPrice: 41450.0,
+          accumulatedTradingVolume: 47568,
+          foreignRetentionRate: 8.28,
+        },
+        {
+          localDate: "20250408",
+          closePrice: 43000.0,
+          openPrice: 43200.0,
+          highPrice: 44150.0,
+          lowPrice: 42750.0,
+          accumulatedTradingVolume: 39016,
+          foreignRetentionRate: 8.26,
+        },
+        {
+          localDate: "20250409",
+          closePrice: 40350.0,
+          openPrice: 43000.0,
+          highPrice: 43950.0,
+          lowPrice: 39950.0,
+          accumulatedTradingVolume: 54459,
+          foreignRetentionRate: 8.2,
+        },
+        {
+          localDate: "20250410",
+          closePrice: 41350.0,
+          openPrice: 41500.0,
+          highPrice: 42500.0,
+          lowPrice: 39850.0,
+          accumulatedTradingVolume: 45027,
+          foreignRetentionRate: 8.17,
+        },
+        {
+          localDate: "20250411",
+          closePrice: 42850.0,
+          openPrice: 40350.0,
+          highPrice: 42850.0,
+          lowPrice: 40350.0,
+          accumulatedTradingVolume: 31518,
+          foreignRetentionRate: 8.18,
+        },
+        {
+          localDate: "20250414",
+          closePrice: 42700.0,
+          openPrice: 42300.0,
+          highPrice: 42850.0,
+          lowPrice: 41350.0,
+          accumulatedTradingVolume: 34550,
+          foreignRetentionRate: 8.11,
+        },
+        {
+          localDate: "20250415",
+          closePrice: 42600.0,
+          openPrice: 41750.0,
+          highPrice: 42700.0,
+          lowPrice: 41600.0,
+          accumulatedTradingVolume: 31964,
+          foreignRetentionRate: 8.09,
+        },
+        {
+          localDate: "20250416",
+          closePrice: 42500.0,
+          openPrice: 41800.0,
+          highPrice: 42600.0,
+          lowPrice: 41600.0,
+          accumulatedTradingVolume: 27252,
+          foreignRetentionRate: 8.07,
+        },
+        {
+          localDate: "20250417",
+          closePrice: 42400.0,
+          openPrice: 41600.0,
+          highPrice: 42600.0,
+          lowPrice: 41600.0,
+          accumulatedTradingVolume: 32355,
+          foreignRetentionRate: 7.99,
+        },
+        {
+          localDate: "20250418",
+          closePrice: 43950.0,
+          openPrice: 41850.0,
+          highPrice: 44350.0,
+          lowPrice: 41850.0,
+          accumulatedTradingVolume: 32071,
+          foreignRetentionRate: 8.06,
+        },
+        {
+          localDate: "20250421",
+          closePrice: 43950.0,
+          openPrice: 44000.0,
+          highPrice: 44500.0,
+          lowPrice: 43500.0,
+          accumulatedTradingVolume: 30954,
+          foreignRetentionRate: 8.0,
+        },
+        {
+          localDate: "20250422",
+          closePrice: 43900.0,
+          openPrice: 43400.0,
+          highPrice: 44000.0,
+          lowPrice: 43400.0,
+          accumulatedTradingVolume: 13147,
+          foreignRetentionRate: 7.97,
+        },
+        {
+          localDate: "20250423",
+          closePrice: 43850.0,
+          openPrice: 43450.0,
+          highPrice: 43950.0,
+          lowPrice: 41850.0,
+          accumulatedTradingVolume: 31685,
+          foreignRetentionRate: 7.97,
+        },
+        {
+          localDate: "20250424",
+          closePrice: 43750.0,
+          openPrice: 44000.0,
+          highPrice: 44100.0,
+          lowPrice: 43200.0,
+          accumulatedTradingVolume: 23492,
+          foreignRetentionRate: 7.8,
+        },
+        {
+          localDate: "20250425",
+          closePrice: 43850.0,
+          openPrice: 44300.0,
+          highPrice: 45500.0,
+          lowPrice: 43600.0,
+          accumulatedTradingVolume: 45940,
+          foreignRetentionRate: 7.84,
+        },
+        {
+          localDate: "20250428",
+          closePrice: 41650.0,
+          openPrice: 43450.0,
+          highPrice: 43450.0,
+          lowPrice: 41350.0,
+          accumulatedTradingVolume: 85026,
+          foreignRetentionRate: 7.67,
+        },
+        {
+          localDate: "20250429",
+          closePrice: 41600.0,
+          openPrice: 41050.0,
+          highPrice: 41600.0,
+          lowPrice: 38200.0,
+          accumulatedTradingVolume: 175153,
+          foreignRetentionRate: 7.76,
+        },
+        {
+          localDate: "20250430",
+          closePrice: 41350.0,
+          openPrice: 40750.0,
+          highPrice: 41450.0,
+          lowPrice: 40450.0,
+          accumulatedTradingVolume: 31899,
+          foreignRetentionRate: 7.72,
+        },
+        {
+          localDate: "20250502",
+          closePrice: 41100.0,
+          openPrice: 41200.0,
+          highPrice: 41250.0,
+          lowPrice: 40550.0,
+          accumulatedTradingVolume: 30212,
+          foreignRetentionRate: 7.68,
+        },
+        {
+          localDate: "20250507",
+          closePrice: 40600.0,
+          openPrice: 40250.0,
+          highPrice: 40950.0,
+          lowPrice: 39850.0,
+          accumulatedTradingVolume: 24761,
+          foreignRetentionRate: 7.54,
+        },
+        {
+          localDate: "20250508",
+          closePrice: 40250.0,
+          openPrice: 40000.0,
+          highPrice: 40500.0,
+          lowPrice: 40000.0,
+          accumulatedTradingVolume: 18034,
+          foreignRetentionRate: 7.53,
+        },
+        {
+          localDate: "20250509",
+          closePrice: 39750.0,
+          openPrice: 39800.0,
+          highPrice: 40900.0,
+          lowPrice: 38500.0,
+          accumulatedTradingVolume: 51566,
+          foreignRetentionRate: 7.49,
+        },
+        {
+          localDate: "20250512",
+          closePrice: 36000.0,
+          openPrice: 39050.0,
+          highPrice: 39450.0,
+          lowPrice: 34500.0,
+          accumulatedTradingVolume: 143880,
+          foreignRetentionRate: 7.52,
+        },
+        {
+          localDate: "20250513",
+          closePrice: 35750.0,
+          openPrice: 36000.0,
+          highPrice: 36800.0,
+          lowPrice: 35550.0,
+          accumulatedTradingVolume: 24437,
+          foreignRetentionRate: 7.54,
+        },
+        {
+          localDate: "20250514",
+          closePrice: 36250.0,
+          openPrice: 35500.0,
+          highPrice: 36400.0,
+          lowPrice: 35400.0,
+          accumulatedTradingVolume: 30041,
+          foreignRetentionRate: 7.54,
+        },
+        {
+          localDate: "20250515",
+          closePrice: 35900.0,
+          openPrice: 36000.0,
+          highPrice: 36700.0,
+          lowPrice: 35550.0,
+          accumulatedTradingVolume: 17037,
+          foreignRetentionRate: 7.46,
+        },
+        {
+          localDate: "20250516",
+          closePrice: 37100.0,
+          openPrice: 35550.0,
+          highPrice: 37350.0,
+          lowPrice: 35350.0,
+          accumulatedTradingVolume: 45500,
+          foreignRetentionRate: 7.56,
+        },
+        {
+          localDate: "20250519",
+          closePrice: 37100.0,
+          openPrice: 36400.0,
+          highPrice: 37250.0,
+          lowPrice: 35500.0,
+          accumulatedTradingVolume: 27433,
+          foreignRetentionRate: 7.55,
+        },
+        {
+          localDate: "20250520",
+          closePrice: 37050.0,
+          openPrice: 36650.0,
+          highPrice: 37250.0,
+          lowPrice: 36450.0,
+          accumulatedTradingVolume: 27063,
+          foreignRetentionRate: 7.71,
+        },
+        {
+          localDate: "20250521",
+          closePrice: 36850.0,
+          openPrice: 36600.0,
+          highPrice: 36950.0,
+          lowPrice: 36300.0,
+          accumulatedTradingVolume: 31668,
+          foreignRetentionRate: 7.65,
+        },
+        {
+          localDate: "20250522",
+          closePrice: 36800.0,
+          openPrice: 36400.0,
+          highPrice: 36850.0,
+          lowPrice: 36100.0,
+          accumulatedTradingVolume: 40509,
+          foreignRetentionRate: 7.54,
+        },
+        {
+          localDate: "20250523",
+          closePrice: 37050.0,
+          openPrice: 36500.0,
+          highPrice: 37450.0,
+          lowPrice: 36500.0,
+          accumulatedTradingVolume: 33283,
+          foreignRetentionRate: 7.62,
+        },
+        {
+          localDate: "20250526",
+          closePrice: 37000.0,
+          openPrice: 36600.0,
+          highPrice: 37500.0,
+          lowPrice: 36350.0,
+          accumulatedTradingVolume: 68069,
+          foreignRetentionRate: 7.56,
+        },
+        {
+          localDate: "20250527",
+          closePrice: 35750.0,
+          openPrice: 37400.0,
+          highPrice: 37400.0,
+          lowPrice: 35350.0,
+          accumulatedTradingVolume: 47119,
+          foreignRetentionRate: 7.47,
+        },
+        {
+          localDate: "20250528",
+          closePrice: 33600.0,
+          openPrice: 35800.0,
+          highPrice: 35800.0,
+          lowPrice: 33350.0,
+          accumulatedTradingVolume: 78147,
+          foreignRetentionRate: 7.49,
+        },
+        {
+          localDate: "20250529",
+          closePrice: 33150.0,
+          openPrice: 33700.0,
+          highPrice: 33850.0,
+          lowPrice: 31050.0,
+          accumulatedTradingVolume: 81212,
+          foreignRetentionRate: 7.53,
+        },
+        {
+          localDate: "20250530",
+          closePrice: 33300.0,
+          openPrice: 33400.0,
+          highPrice: 33700.0,
+          lowPrice: 32550.0,
+          accumulatedTradingVolume: 45132,
+          foreignRetentionRate: 7.41,
+        },
+        {
+          localDate: "20250602",
+          closePrice: 33800.0,
+          openPrice: 33100.0,
+          highPrice: 34100.0,
+          lowPrice: 32800.0,
+          accumulatedTradingVolume: 31153,
+          foreignRetentionRate: 7.46,
+        },
+        {
+          localDate: "20250604",
+          closePrice: 33900.0,
+          openPrice: 33450.0,
+          highPrice: 34350.0,
+          lowPrice: 33450.0,
+          accumulatedTradingVolume: 26410,
+          foreignRetentionRate: 7.39,
+        },
+        {
+          localDate: "20250605",
+          closePrice: 34750.0,
+          openPrice: 33550.0,
+          highPrice: 35200.0,
+          lowPrice: 33550.0,
+          accumulatedTradingVolume: 31491,
+          foreignRetentionRate: 7.4,
+        },
+        {
+          localDate: "20250609",
+          closePrice: 37200.0,
+          openPrice: 35750.0,
+          highPrice: 37900.0,
+          lowPrice: 35000.0,
+          accumulatedTradingVolume: 52567,
+          foreignRetentionRate: 7.3,
+        },
+        {
+          localDate: "20250610",
+          closePrice: 37400.0,
+          openPrice: 37400.0,
+          highPrice: 37500.0,
+          lowPrice: 36700.0,
+          accumulatedTradingVolume: 30804,
+          foreignRetentionRate: 7.27,
+        },
+        {
+          localDate: "20250611",
+          closePrice: 38450.0,
+          openPrice: 37400.0,
+          highPrice: 38700.0,
+          lowPrice: 37200.0,
+          accumulatedTradingVolume: 48908,
+          foreignRetentionRate: 7.37,
+        },
+        {
+          localDate: "20250612",
+          closePrice: 38300.0,
+          openPrice: 38200.0,
+          highPrice: 39250.0,
+          lowPrice: 37900.0,
+          accumulatedTradingVolume: 50411,
+          foreignRetentionRate: 7.26,
+        },
+        {
+          localDate: "20250613",
+          closePrice: 37700.0,
+          openPrice: 38300.0,
+          highPrice: 38300.0,
+          lowPrice: 35400.0,
+          accumulatedTradingVolume: 107727,
+          foreignRetentionRate: 7.02,
+        },
+        {
+          localDate: "20250616",
+          closePrice: 37750.0,
+          openPrice: 36550.0,
+          highPrice: 37900.0,
+          lowPrice: 36300.0,
+          accumulatedTradingVolume: 42671,
+          foreignRetentionRate: 7.04,
+        },
+        {
+          localDate: "20250617",
+          closePrice: 38700.0,
+          openPrice: 37800.0,
+          highPrice: 39100.0,
+          lowPrice: 37350.0,
+          accumulatedTradingVolume: 64806,
+          foreignRetentionRate: 7.43,
+        },
+        {
+          localDate: "20250618",
+          closePrice: 38600.0,
+          openPrice: 38150.0,
+          highPrice: 38950.0,
+          lowPrice: 38100.0,
+          accumulatedTradingVolume: 20250,
+          foreignRetentionRate: 7.35,
+        },
+        {
+          localDate: "20250619",
+          closePrice: 38950.0,
+          openPrice: 38300.0,
+          highPrice: 38950.0,
+          lowPrice: 38100.0,
+          accumulatedTradingVolume: 21327,
+          foreignRetentionRate: 7.33,
+        },
+        {
+          localDate: "20250620",
+          closePrice: 39000.0,
+          openPrice: 38900.0,
+          highPrice: 39600.0,
+          lowPrice: 38700.0,
+          accumulatedTradingVolume: 78255,
+          foreignRetentionRate: 7.27,
+        },
+        {
+          localDate: "20250623",
+          closePrice: 38600.0,
+          openPrice: 38650.0,
+          highPrice: 39000.0,
+          lowPrice: 38250.0,
+          accumulatedTradingVolume: 51351,
+          foreignRetentionRate: 7.25,
+        },
+        {
+          localDate: "20250624",
+          closePrice: 38700.0,
+          openPrice: 38600.0,
+          highPrice: 39400.0,
+          lowPrice: 37300.0,
+          accumulatedTradingVolume: 92583,
+          foreignRetentionRate: 7.11,
+        },
+        {
+          localDate: "20250625",
+          closePrice: 39400.0,
+          openPrice: 38400.0,
+          highPrice: 39750.0,
+          lowPrice: 37900.0,
+          accumulatedTradingVolume: 72831,
+          foreignRetentionRate: 7.26,
+        },
+        {
+          localDate: "20250626",
+          closePrice: 39250.0,
+          openPrice: 39500.0,
+          highPrice: 39650.0,
+          lowPrice: 38300.0,
+          accumulatedTradingVolume: 41423,
+          foreignRetentionRate: 7.16,
+        },
+        {
+          localDate: "20250627",
+          closePrice: 39550.0,
+          openPrice: 40000.0,
+          highPrice: 40500.0,
+          lowPrice: 39500.0,
+          accumulatedTradingVolume: 54263,
+          foreignRetentionRate: 7.05,
+        },
+        {
+          localDate: "20250630",
+          closePrice: 38700.0,
+          openPrice: 39450.0,
+          highPrice: 39450.0,
+          lowPrice: 38250.0,
+          accumulatedTradingVolume: 70422,
+          foreignRetentionRate: 6.87,
+        },
+        {
+          localDate: "20250701",
+          closePrice: 42000.0,
+          openPrice: 39800.0,
+          highPrice: 42000.0,
+          lowPrice: 38200.0,
+          accumulatedTradingVolume: 209434,
+          foreignRetentionRate: 7.33,
+        },
+        {
+          localDate: "20250702",
+          closePrice: 40900.0,
+          openPrice: 41550.0,
+          highPrice: 41850.0,
+          lowPrice: 40000.0,
+          accumulatedTradingVolume: 95103,
+          foreignRetentionRate: 7.08,
+        },
+        {
+          localDate: "20250703",
+          closePrice: 42000.0,
+          openPrice: 41300.0,
+          highPrice: 42000.0,
+          lowPrice: 40500.0,
+          accumulatedTradingVolume: 50219,
+          foreignRetentionRate: 7.09,
+        },
+        {
+          localDate: "20250704",
+          closePrice: 40900.0,
+          openPrice: 42150.0,
+          highPrice: 42150.0,
+          lowPrice: 40050.0,
+          accumulatedTradingVolume: 66830,
+          foreignRetentionRate: 6.87,
+        },
+        {
+          localDate: "20250707",
+          closePrice: 40950.0,
+          openPrice: 40500.0,
+          highPrice: 41900.0,
+          lowPrice: 40000.0,
+          accumulatedTradingVolume: 35668,
+          foreignRetentionRate: 6.88,
+        },
+        {
+          localDate: "20250708",
+          closePrice: 41650.0,
+          openPrice: 41100.0,
+          highPrice: 41950.0,
+          lowPrice: 39450.0,
+          accumulatedTradingVolume: 90548,
+          foreignRetentionRate: 6.96,
+        },
+        {
+          localDate: "20250709",
+          closePrice: 42050.0,
+          openPrice: 42150.0,
+          highPrice: 42650.0,
+          lowPrice: 41350.0,
+          accumulatedTradingVolume: 67182,
+          foreignRetentionRate: 6.84,
+        },
+        {
+          localDate: "20250710",
+          closePrice: 42450.0,
+          openPrice: 41850.0,
+          highPrice: 42500.0,
+          lowPrice: 41500.0,
+          accumulatedTradingVolume: 66321,
+          foreignRetentionRate: 6.91,
+        },
+        {
+          localDate: "20250711",
+          closePrice: 42450.0,
+          openPrice: 42450.0,
+          highPrice: 42750.0,
+          lowPrice: 42000.0,
+          accumulatedTradingVolume: 58548,
+          foreignRetentionRate: 6.92,
+        },
+        {
+          localDate: "20250714",
+          closePrice: 42250.0,
+          openPrice: 42450.0,
+          highPrice: 42900.0,
+          lowPrice: 42200.0,
+          accumulatedTradingVolume: 23005,
+          foreignRetentionRate: 6.89,
+        },
+        {
+          localDate: "20250715",
+          closePrice: 42450.0,
+          openPrice: 42000.0,
+          highPrice: 42450.0,
+          lowPrice: 41800.0,
+          accumulatedTradingVolume: 16760,
+          foreignRetentionRate: 6.89,
+        },
+        {
+          localDate: "20250716",
+          closePrice: 42450.0,
+          openPrice: 42400.0,
+          highPrice: 42750.0,
+          lowPrice: 41950.0,
+          accumulatedTradingVolume: 26153,
+          foreignRetentionRate: 6.85,
+        },
+        {
+          localDate: "20250717",
+          closePrice: 42350.0,
+          openPrice: 42500.0,
+          highPrice: 42550.0,
+          lowPrice: 41300.0,
+          accumulatedTradingVolume: 38763,
+          foreignRetentionRate: 6.78,
+        },
+        {
+          localDate: "20250718",
+          closePrice: 42850.0,
+          openPrice: 42250.0,
+          highPrice: 43050.0,
+          lowPrice: 41800.0,
+          accumulatedTradingVolume: 60705,
+          foreignRetentionRate: 6.95,
+        },
+        {
+          localDate: "20250721",
+          closePrice: 42950.0,
+          openPrice: 43200.0,
+          highPrice: 43400.0,
+          lowPrice: 42600.0,
+          accumulatedTradingVolume: 63986,
+          foreignRetentionRate: 6.91,
+        },
+        {
+          localDate: "20250722",
+          closePrice: 42850.0,
+          openPrice: 42850.0,
+          highPrice: 43000.0,
+          lowPrice: 42200.0,
+          accumulatedTradingVolume: 33279,
+          foreignRetentionRate: 6.84,
+        },
+        {
+          localDate: "20250723",
+          closePrice: 42550.0,
+          openPrice: 42850.0,
+          highPrice: 43350.0,
+          lowPrice: 41950.0,
+          accumulatedTradingVolume: 26109,
+          foreignRetentionRate: 6.8,
+        },
+        {
+          localDate: "20250724",
+          closePrice: 42600.0,
+          openPrice: 42750.0,
+          highPrice: 42900.0,
+          lowPrice: 42300.0,
+          accumulatedTradingVolume: 42860,
+          foreignRetentionRate: 6.85,
+        },
+        {
+          localDate: "20250725",
+          closePrice: 42550.0,
+          openPrice: 42600.0,
+          highPrice: 42700.0,
+          lowPrice: 42400.0,
+          accumulatedTradingVolume: 20389,
+          foreignRetentionRate: 6.85,
+        },
+        {
+          localDate: "20250728",
+          closePrice: 42400.0,
+          openPrice: 42650.0,
+          highPrice: 42650.0,
+          lowPrice: 40850.0,
+          accumulatedTradingVolume: 114448,
+          foreignRetentionRate: 6.72,
+        },
+        {
+          localDate: "20250729",
+          closePrice: 42300.0,
+          openPrice: 42600.0,
+          highPrice: 42600.0,
+          lowPrice: 41300.0,
+          accumulatedTradingVolume: 50607,
+          foreignRetentionRate: 6.63,
+        },
+        {
+          localDate: "20250730",
+          closePrice: 43300.0,
+          openPrice: 42250.0,
+          highPrice: 43450.0,
+          lowPrice: 42250.0,
+          accumulatedTradingVolume: 73433,
+          foreignRetentionRate: 6.88,
+        },
+        {
+          localDate: "20250731",
+          closePrice: 42750.0,
+          openPrice: 43500.0,
+          highPrice: 43500.0,
+          lowPrice: 42600.0,
+          accumulatedTradingVolume: 34949,
+          foreignRetentionRate: 6.83,
+        },
+        {
+          localDate: "20250801",
+          closePrice: 42200.0,
+          openPrice: 42000.0,
+          highPrice: 42750.0,
+          lowPrice: 41850.0,
+          accumulatedTradingVolume: 55785,
+          foreignRetentionRate: 6.76,
+        },
+        {
+          localDate: "20250804",
+          closePrice: 42250.0,
+          openPrice: 41550.0,
+          highPrice: 42400.0,
+          lowPrice: 40350.0,
+          accumulatedTradingVolume: 48644,
+          foreignRetentionRate: 6.61,
+        },
+        {
+          localDate: "20250805",
+          closePrice: 43100.0,
+          openPrice: 42050.0,
+          highPrice: 44050.0,
+          lowPrice: 41850.0,
+          accumulatedTradingVolume: 90948,
+          foreignRetentionRate: 6.64,
+        },
+        {
+          localDate: "20250806",
+          closePrice: 43050.0,
+          openPrice: 42800.0,
+          highPrice: 43150.0,
+          lowPrice: 42100.0,
+          accumulatedTradingVolume: 30739,
+          foreignRetentionRate: 6.58,
+        },
+        {
+          localDate: "20250807",
+          closePrice: 43300.0,
+          openPrice: 42900.0,
+          highPrice: 43500.0,
+          lowPrice: 42850.0,
+          accumulatedTradingVolume: 32522,
+          foreignRetentionRate: 6.63,
+        },
+        {
+          localDate: "20250808",
+          closePrice: 43350.0,
+          openPrice: 43200.0,
+          highPrice: 43800.0,
+          lowPrice: 43200.0,
+          accumulatedTradingVolume: 25083,
+          foreignRetentionRate: 6.84,
+        },
+        {
+          localDate: "20250811",
+          closePrice: 42900.0,
+          openPrice: 43950.0,
+          highPrice: 43950.0,
+          lowPrice: 42750.0,
+          accumulatedTradingVolume: 25649,
+          foreignRetentionRate: 6.77,
+        },
+        {
+          localDate: "20250812",
+          closePrice: 42700.0,
+          openPrice: 41900.0,
+          highPrice: 42900.0,
+          lowPrice: 41550.0,
+          accumulatedTradingVolume: 75749,
+          foreignRetentionRate: 6.58,
+        },
+        {
+          localDate: "20250813",
+          closePrice: 42650.0,
+          openPrice: 42050.0,
+          highPrice: 43000.0,
+          lowPrice: 42050.0,
+          accumulatedTradingVolume: 36608,
+          foreignRetentionRate: 6.62,
+        },
+        {
+          localDate: "20250814",
+          closePrice: 43150.0,
+          openPrice: 42500.0,
+          highPrice: 43700.0,
+          lowPrice: 42500.0,
+          accumulatedTradingVolume: 61445,
+          foreignRetentionRate: 6.74,
+        },
+        {
+          localDate: "20250818",
+          closePrice: 41100.0,
+          openPrice: 43400.0,
+          highPrice: 43650.0,
+          lowPrice: 40500.0,
+          accumulatedTradingVolume: 98075,
+          foreignRetentionRate: 6.39,
+        },
+        {
+          localDate: "20250819",
+          closePrice: 41000.0,
+          openPrice: 40550.0,
+          highPrice: 41250.0,
+          lowPrice: 40050.0,
+          accumulatedTradingVolume: 41443,
+          foreignRetentionRate: 6.37,
+        },
+        {
+          localDate: "20250820",
+          closePrice: 40950.0,
+          openPrice: 40300.0,
+          highPrice: 41000.0,
+          lowPrice: 40300.0,
+          accumulatedTradingVolume: 35943,
+          foreignRetentionRate: 6.4,
+        },
+        {
+          localDate: "20250821",
+          closePrice: 40950.0,
+          openPrice: 40800.0,
+          highPrice: 41450.0,
+          lowPrice: 40600.0,
+          accumulatedTradingVolume: 18171,
+          foreignRetentionRate: 6.36,
+        },
+        {
+          localDate: "20250822",
+          closePrice: 41200.0,
+          openPrice: 40700.0,
+          highPrice: 41700.0,
+          lowPrice: 40700.0,
+          accumulatedTradingVolume: 24534,
+          foreignRetentionRate: 6.35,
+        },
+        {
+          localDate: "20250825",
+          closePrice: 41550.0,
+          openPrice: 41150.0,
+          highPrice: 41750.0,
+          lowPrice: 41000.0,
+          accumulatedTradingVolume: 13009,
+          foreignRetentionRate: 6.39,
+        },
+        {
+          localDate: "20250826",
+          closePrice: 41400.0,
+          openPrice: 41550.0,
+          highPrice: 41600.0,
+          lowPrice: 39100.0,
+          accumulatedTradingVolume: 23658,
+          foreignRetentionRate: 6.41,
+        },
+        {
+          localDate: "20250827",
+          closePrice: 41400.0,
+          openPrice: 41400.0,
+          highPrice: 41800.0,
+          lowPrice: 41100.0,
+          accumulatedTradingVolume: 21636,
+          foreignRetentionRate: 6.41,
+        },
+        {
+          localDate: "20250828",
+          closePrice: 41350.0,
+          openPrice: 41150.0,
+          highPrice: 41500.0,
+          lowPrice: 41100.0,
+          accumulatedTradingVolume: 23934,
+          foreignRetentionRate: 6.44,
+        },
+        {
+          localDate: "20250829",
+          closePrice: 41150.0,
+          openPrice: 41100.0,
+          highPrice: 41450.0,
+          lowPrice: 40950.0,
+          accumulatedTradingVolume: 37064,
+          foreignRetentionRate: 6.38,
+        },
+        {
+          localDate: "20250901",
+          closePrice: 40050.0,
+          openPrice: 41000.0,
+          highPrice: 41150.0,
+          lowPrice: 39150.0,
+          accumulatedTradingVolume: 98028,
+          foreignRetentionRate: 6.17,
+        },
+        {
+          localDate: "20250902",
+          closePrice: 39950.0,
+          openPrice: 40200.0,
+          highPrice: 40400.0,
+          lowPrice: 37150.0,
+          accumulatedTradingVolume: 102839,
+          foreignRetentionRate: 6.04,
+        },
+        {
+          localDate: "20250903",
+          closePrice: 38550.0,
+          openPrice: 39150.0,
+          highPrice: 39550.0,
+          lowPrice: 38550.0,
+          accumulatedTradingVolume: 82768,
+          foreignRetentionRate: 6.08,
+        },
+        {
+          localDate: "20250904",
+          closePrice: 35650.0,
+          openPrice: 38250.0,
+          highPrice: 38250.0,
+          lowPrice: 35450.0,
+          accumulatedTradingVolume: 125176,
+          foreignRetentionRate: 5.95,
+        },
+        {
+          localDate: "20250905",
+          closePrice: 34950.0,
+          openPrice: 35750.0,
+          highPrice: 35750.0,
+          lowPrice: 34850.0,
+          accumulatedTradingVolume: 34030,
+          foreignRetentionRate: 5.95,
+        },
+      ];
+
+      let charts = {};
+
+      // 날짜 파싱 함수
+      function parseDate(dateStr) {
+        const year = dateStr.substring(0, 4);
+        const month = dateStr.substring(4, 6);
+        const day = dateStr.substring(6, 8);
+        return new Date(year, month - 1, day);
+      }
+
+      // 이동평균선 계산 함수
+      function calculateMovingAverage(data, period) {
+        const result = [];
+        for (let i = 0; i < data.length; i++) {
+          if (i < period - 1) {
+            result.push(null); // 데이터가 부족한 경우 null
+          } else {
+            let sum = 0;
+            for (let j = i - period + 1; j <= i; j++) {
+              sum += data[j].closePrice;
+            }
+            result.push({
+              x: parseDate(data[i].localDate),
+              y: sum / period,
+            });
+          }
+        }
+        return result.filter((item) => item !== null); // null 값 제거
+      }
+
+      // 일목균형표 계산 함수
+      function calculateIchimoku(data) {
+        const result = {
+          tenkanSen: [],
+          kijunSen: [],
+          chikouSpan: [],
+          senkouSpanA: [],
+          senkouSpanB: [],
+          cloudTop: [],
+          cloudBottom: [],
+        };
+
+        for (let i = 0; i < data.length; i++) {
+          const date = parseDate(data[i].localDate);
+
+          // 전환선 (Tenkan-sen): 9일간 최고가와 최저가의 평균
+          if (i >= 8) {
+            let high = Math.max(
+              ...data.slice(i - 8, i + 1).map((d) => d.highPrice)
+            );
+            let low = Math.min(
+              ...data.slice(i - 8, i + 1).map((d) => d.lowPrice)
+            );
+            result.tenkanSen.push({ x: date, y: (high + low) / 2 });
+          } else {
+            result.tenkanSen.push({ x: date, y: null });
+          }
+
+          // 기준선 (Kijun-sen): 26일간 최고가와 최저가의 평균
+          if (i >= 25) {
+            let high = Math.max(
+              ...data.slice(i - 25, i + 1).map((d) => d.highPrice)
+            );
+            let low = Math.min(
+              ...data.slice(i - 25, i + 1).map((d) => d.lowPrice)
+            );
+            result.kijunSen.push({ x: date, y: (high + low) / 2 });
+          } else {
+            result.kijunSen.push({ x: date, y: null });
+          }
+
+          // 후행스팬 (Chikou Span): 26일 전 종가
+          if (i >= 25) {
+            result.chikouSpan.push({ x: date, y: data[i - 25].closePrice });
+          } else {
+            result.chikouSpan.push({ x: date, y: null });
+          }
+
+          // 선행스팬 A (Senkou Span A): (전환선 + 기준선) / 2를 26일 앞으로
+          if (i >= 25) {
+            let tenkan = result.tenkanSen[i].y;
+            let kijun = result.kijunSen[i].y;
+            if (tenkan !== null && kijun !== null) {
+              result.senkouSpanA.push({ x: date, y: (tenkan + kijun) / 2 });
+            } else {
+              result.senkouSpanA.push({ x: date, y: null });
+            }
+          } else {
+            result.senkouSpanA.push({ x: date, y: null });
+          }
+
+          // 선행스팬 B (Senkou Span B): 52일간 최고가와 최저가 평균을 26일 앞으로
+          if (i >= 51) {
+            let high = Math.max(
+              ...data.slice(i - 51, i + 1).map((d) => d.highPrice)
+            );
+            let low = Math.min(
+              ...data.slice(i - 51, i + 1).map((d) => d.lowPrice)
+            );
+            result.senkouSpanB.push({ x: date, y: (high + low) / 2 });
+          } else {
+            result.senkouSpanB.push({ x: date, y: null });
+          }
+        }
+
+        // 구름대 (Cloud) 상단과 하단 계산
+        for (let i = 0; i < result.senkouSpanA.length; i++) {
+          const spanA = result.senkouSpanA[i].y;
+          const spanB = result.senkouSpanB[i].y;
+
+          if (spanA !== null && spanB !== null) {
+            result.cloudTop.push({
+              x: result.senkouSpanA[i].x,
+              y: Math.max(spanA, spanB),
+            });
+            result.cloudBottom.push({
+              x: result.senkouSpanA[i].x,
+              y: Math.min(spanA, spanB),
+            });
+          } else {
+            result.cloudTop.push({
+              x: result.senkouSpanA[i].x,
+              y: null,
+            });
+            result.cloudBottom.push({
+              x: result.senkouSpanA[i].x,
+              y: null,
+            });
+          }
+        }
+
+        // null 값 제거
+        Object.keys(result).forEach((key) => {
+          result[key] = result[key].filter((item) => item.y !== null);
+        });
+
+        return result;
+      }
+
+      // MACD 계산 함수 (키움증권 기준)
+      function calculateMACD(data, short = 12, long = 26, signal = 9) {
+        // EMA 계산 함수
+        function calculateEMA(values, period) {
+          const ema = [];
+          const multiplier = 2 / (period + 1);
+
+          // 첫 번째 EMA는 SMA로 시작
+          let sum = 0;
+          for (let i = 0; i < period && i < values.length; i++) {
+            sum += values[i];
+          }
+          ema[period - 1] = sum / period;
+
+          // 나머지 EMA 계산
+          for (let i = period; i < values.length; i++) {
+            ema[i] = values[i] * multiplier + ema[i - 1] * (1 - multiplier);
+          }
+
+          return ema;
+        }
+
+        const prices = data.map((d) => d.closePrice);
+
+        // 12일 EMA와 26일 EMA 계산
+        const ema12 = calculateEMA(prices, short);
+        const ema26 = calculateEMA(prices, long);
+
+        // MACD 라인 계산 (EMA12 - EMA26)
+        const macdLine = [];
+        for (let i = long - 1; i < data.length; i++) {
+          if (ema12[i] !== undefined && ema26[i] !== undefined) {
+            macdLine.push(ema12[i] - ema26[i]);
+          }
+        }
+
+        // Signal 라인 계산 (MACD의 9일 EMA)
+        const signalLine = calculateEMA(macdLine, signal);
+
+        // Histogram 계산 (MACD - Signal)
+        const histogram = [];
+        for (let i = 0; i < macdLine.length; i++) {
+          if (signalLine[i] !== undefined) {
+            histogram.push(macdLine[i] - signalLine[i]);
+          }
+        }
+
+        // 결과를 Chart.js 형식으로 변환
+        const result = {
+          macd: [],
+          signal: [],
+          histogram: [],
+        };
+
+        // MACD 데이터 포인트 생성
+        for (let i = 0; i < macdLine.length; i++) {
+          const dataIndex = i + long - 1;
+          if (dataIndex < data.length) {
+            const date = parseDate(data[dataIndex].localDate);
+
+            result.macd.push({
+              x: date,
+              y: macdLine[i],
+            });
+
+            if (signalLine[i] !== undefined) {
+              result.signal.push({
+                x: date,
+                y: signalLine[i],
+              });
+
+              result.histogram.push({
+                x: date,
+                y: histogram[i - signal + 1] || 0,
+              });
+            }
+          }
+        }
+
+        return result;
+      }
+
+      // RCI 계산 함수 (키움증권 기준 - 완전 재구현)
+      function calculateRCI(data) {
+        const prices = data.map((d) => d.closePrice);
+
+        // 표준 RCI 계산 함수 (Spearman 순위 상관계수 기반)
+        function calculateStandardRCI(prices, period, currentIndex) {
+          if (currentIndex < period - 1) return null;
+
+          // 해당 기간의 가격 데이터와 날짜 순위 추출
+          const periodPrices = [];
+          for (let i = 0; i < period; i++) {
+            periodPrices.push({
+              price: prices[currentIndex - i],
+              dateRank: i + 1, // 1이 최신, period가 가장 오래된 것
+            });
+          }
+
+          // 가격 순위 계산 (큰 가격부터 1위)
+          periodPrices.sort((a, b) => b.price - a.price);
+          for (let i = 0; i < periodPrices.length; i++) {
+            periodPrices[i].priceRank = i + 1;
+          }
+
+          // 원래 순서로 복원
+          periodPrices.sort((a, b) => a.dateRank - b.dateRank);
+
+          // Spearman 순위 상관계수 계산
+          let sumD2 = 0;
+          for (let i = 0; i < period; i++) {
+            const d = periodPrices[i].dateRank - periodPrices[i].priceRank;
+            sumD2 += d * d;
+          }
+
+          const n = period;
+          const rci = (1 - (6 * sumD2) / (n * (n * n - 1))) * 100;
+          return rci;
+        }
+
+        // 결과 배열 생성
+        const result = {
+          rci9: [],
+          rci13: [],
+          rci18: [],
+          rci26: [],
+        };
+
+        // 각 데이터 포인트에 대해 RCI 계산
+        for (let i = 0; i < data.length; i++) {
+          const date = parseDate(data[i].localDate);
+
+          const rci9 = calculateStandardRCI(prices, 9, i);
+          const rci13 = calculateStandardRCI(prices, 13, i);
+          const rci18 = calculateStandardRCI(prices, 18, i);
+          const rci26 = calculateStandardRCI(prices, 26, i);
+
+          if (rci9 !== null) {
+            result.rci9.push({ x: date, y: rci9 });
+          }
+          if (rci13 !== null) {
+            result.rci13.push({ x: date, y: rci13 });
+          }
+          if (rci18 !== null) {
+            result.rci18.push({ x: date, y: rci18 });
+          }
+          if (rci26 !== null) {
+            result.rci26.push({ x: date, y: rci26 });
+          }
+        }
+
+        return result;
+      }
+
+      // 통계 초기화
+      function initializeStats() {
+        const latest = stockData[stockData.length - 1];
+        const oldest = stockData[0];
+        const prices = stockData.map((d) => d.closePrice);
+        const volumes = stockData.map((d) => d.accumulatedTradingVolume);
+
+        const maxPrice = Math.max(...prices);
+        const minPrice = Math.min(...prices);
+        const avgVolume = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+        const priceChange = latest.closePrice - oldest.closePrice;
+        const priceChangePercent = (
+          (priceChange / oldest.closePrice) *
+          100
+        ).toFixed(2);
+
+        const statsHTML = `
+                <div class="stat-card">
+                    <div class="stat-label">현재가</div>
+                    <div class="stat-value" style="color: ${
+                      latest.closePrice >= oldest.closePrice
+                        ? "#27ae60"
+                        : "#e74c3c"
+                    }">
+                        ${latest.closePrice.toLocaleString()}원
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">기간 등락률</div>
+                    <div class="stat-value" style="color: ${
+                      priceChange >= 0 ? "#27ae60" : "#e74c3c"
+                    }">
+                        ${priceChange >= 0 ? "+" : ""}${priceChangePercent}%
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">최고가</div>
+                    <div class="stat-value">${maxPrice.toLocaleString()}원</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">최저가</div>
+                    <div class="stat-value">${minPrice.toLocaleString()}원</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">평균 거래량</div>
+                    <div class="stat-value">${Math.round(
+                      avgVolume
+                    ).toLocaleString()}주</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">외국인 보유율</div>
+                    <div class="stat-value">${
+                      latest.foreignRetentionRate
+                    }%</div>
+                </div>
+            `;
+
+        document.getElementById("statsGrid").innerHTML = statsHTML;
+      }
+
+      // 빗금 패턴 생성 함수
+      function createHatchPattern(ctx, color, direction = "right") {
+        const patternCanvas = document.createElement("canvas");
+        const patternContext = patternCanvas.getContext("2d");
+
+        patternCanvas.width = 10;
+        patternCanvas.height = 10;
+
+        patternContext.strokeStyle = color;
+        patternContext.lineWidth = 1;
+        patternContext.globalAlpha = 0.6;
+
+        if (direction === "right") {
+          // 우상향 빗금 (/)
+          patternContext.beginPath();
+          patternContext.moveTo(0, 10);
+          patternContext.lineTo(10, 0);
+          patternContext.stroke();
+
+          patternContext.beginPath();
+          patternContext.moveTo(-2, 12);
+          patternContext.lineTo(8, 2);
+          patternContext.stroke();
+
+          patternContext.beginPath();
+          patternContext.moveTo(2, -2);
+          patternContext.lineTo(12, 8);
+          patternContext.stroke();
+        } else {
+          // 좌상향 빗금 (\)
+          patternContext.beginPath();
+          patternContext.moveTo(0, 0);
+          patternContext.lineTo(10, 10);
+          patternContext.stroke();
+
+          patternContext.beginPath();
+          patternContext.moveTo(-2, -2);
+          patternContext.lineTo(8, 8);
+          patternContext.stroke();
+
+          patternContext.beginPath();
+          patternContext.moveTo(2, 2);
+          patternContext.lineTo(12, 12);
+          patternContext.stroke();
+        }
+
+        return ctx.createPattern(patternCanvas, "repeat");
+      }
+
+      // 주가 차트 생성
+      function createPriceChart() {
+        const ctx = document
+          .getElementById("candlestickChart")
+          .getContext("2d");
+
+        // 빗금 패턴 생성
+        const orangeHatchPattern = createHatchPattern(ctx, "#e67e22", "right");
+        const skyBlueHatchPattern = createHatchPattern(ctx, "#3498db", "left");
+
+        // 이동평균선 데이터 계산
+        const ma5 = calculateMovingAverage(stockData, 5);
+        const ma20 = calculateMovingAverage(stockData, 20);
+        const ma60 = calculateMovingAverage(stockData, 60);
+
+        // 일목균형표 데이터 계산
+        const ichimoku = calculateIchimoku(stockData);
+
+        charts.price = new Chart(ctx, {
+          type: "line",
+          data: {
+            datasets: [
+              {
+                label: "종가",
+                data: stockData.map((item) => ({
+                  x: parseDate(item.localDate),
+                  y: item.closePrice,
+                })),
+                borderColor: "#2c3e50",
+                backgroundColor: "rgba(44, 62, 80, 0.1)",
+                fill: false,
+                tension: 0.1,
+                pointRadius: 2,
+                pointHoverRadius: 5,
+                borderWidth: 2,
+                order: 1,
+              },
+              {
+                label: "5일 이평선",
+                data: ma5,
+                borderColor: "#e74c3c",
+                backgroundColor: "transparent",
+                fill: false,
+                tension: 0.3,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                borderWidth: 2,
+                order: 2,
+              },
+              {
+                label: "20일 이평선",
+                data: ma20,
+                borderColor: "#f39c12",
+                backgroundColor: "transparent",
+                fill: false,
+                tension: 0.3,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                borderWidth: 2,
+                order: 3,
+              },
+              {
+                label: "60일 이평선",
+                data: ma60,
+                borderColor: "#9b59b6",
+                backgroundColor: "transparent",
+                fill: false,
+                tension: 0.3,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                borderWidth: 2,
+                order: 4,
+              },
+              {
+                label: "고가",
+                data: stockData.map((item) => ({
+                  x: parseDate(item.localDate),
+                  y: item.highPrice,
+                })),
+                borderColor: "rgba(231, 76, 60, 0.5)",
+                backgroundColor: "transparent",
+                borderDash: [3, 3],
+                pointRadius: 0,
+                pointHoverRadius: 2,
+                borderWidth: 1,
+                order: 5,
+              },
+              {
+                label: "저가",
+                data: stockData.map((item) => ({
+                  x: parseDate(item.localDate),
+                  y: item.lowPrice,
+                })),
+                borderColor: "rgba(39, 174, 96, 0.5)",
+                backgroundColor: "transparent",
+                borderDash: [3, 3],
+                pointRadius: 0,
+                pointHoverRadius: 2,
+                borderWidth: 1,
+                order: 6,
+              },
+              // 일목균형표 구성요소들
+              {
+                label: "전환선 (9일)",
+                data: ichimoku.tenkanSen,
+                borderColor: "#1abc9c",
+                backgroundColor: "transparent",
+                fill: false,
+                tension: 0.2,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                borderWidth: 1.5,
+                order: 7,
+              },
+              {
+                label: "기준선 (26일)",
+                data: ichimoku.kijunSen,
+                borderColor: "#e67e22",
+                backgroundColor: "transparent",
+                fill: false,
+                tension: 0.2,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                borderWidth: 1.5,
+                order: 8,
+              },
+              {
+                label: "후행스팬",
+                data: ichimoku.chikouSpan,
+                borderColor: "#8e44ad",
+                backgroundColor: "transparent",
+                fill: false,
+                tension: 0.2,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                borderWidth: 1.5,
+                borderDash: [2, 2],
+                order: 9,
+              },
+              {
+                label: "구름대 상단",
+                data: ichimoku.cloudTop,
+                borderColor: "rgba(230, 126, 34, 0.8)",
+                backgroundColor: orangeHatchPattern,
+                fill: "+1", // 다음 dataset과 채우기
+                tension: 0.2,
+                pointRadius: 0,
+                pointHoverRadius: 0,
+                borderWidth: 1,
+                order: 10,
+              },
+              {
+                label: "구름대 하단",
+                data: ichimoku.cloudBottom,
+                borderColor: "rgba(52, 152, 219, 0.8)",
+                backgroundColor: skyBlueHatchPattern,
+                fill: false,
+                tension: 0.2,
+                pointRadius: 0,
+                pointHoverRadius: 0,
+                borderWidth: 1,
+                order: 11,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+              intersect: false,
+              mode: "index",
+            },
+            scales: {
+              x: {
+                type: "time",
+                time: {
+                  displayFormats: {
+                    day: "MM/dd",
+                    week: "MM/dd",
+                    month: "yy/MM",
+                  },
+                },
+                title: {
+                  display: true,
+                  text: "날짜",
+                },
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: "가격 (원)",
+                },
+                ticks: {
+                  callback: function (value) {
+                    return value.toLocaleString() + "원";
+                  },
+                },
+              },
+            },
+            plugins: {
+              legend: {
+                display: true,
+                position: "top",
+              },
+              tooltip: {
+                callbacks: {
+                  label: function (context) {
+                    return (
+                      context.dataset.label +
+                      ": " +
+                      context.parsed.y.toLocaleString() +
+                      "원"
+                    );
+                  },
+                },
+              },
+            },
+          },
+        });
+      }
+
+      // 거래량 차트 생성
+      function createVolumeChart() {
+        const ctx = document
+          .getElementById("volumeChartCanvas")
+          .getContext("2d");
+
+        charts.volume = new Chart(ctx, {
+          type: "bar",
+          data: {
+            datasets: [
+              {
+                label: "거래량",
+                data: stockData.map((item) => ({
+                  x: parseDate(item.localDate),
+                  y: item.accumulatedTradingVolume,
+                })),
+                backgroundColor: stockData.map((item, index) => {
+                  if (index === 0) return "#3498db";
+                  const prevClose = stockData[index - 1].closePrice;
+                  return item.closePrice >= prevClose ? "#27ae60" : "#e74c3c";
+                }),
+                borderWidth: 0,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                type: "time",
+                time: {
+                  displayFormats: {
+                    day: "MM/dd",
+                    week: "MM/dd",
+                    month: "yy/MM",
+                  },
+                },
+                title: {
+                  display: true,
+                  text: "날짜",
+                },
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: "거래량 (주)",
+                },
+                ticks: {
+                  callback: function (value) {
+                    return value.toLocaleString() + "주";
+                  },
+                },
+              },
+            },
+            plugins: {
+              legend: {
+                display: false,
+              },
+              tooltip: {
+                callbacks: {
+                  label: function (context) {
+                    return (
+                      "거래량: " + context.parsed.y.toLocaleString() + "주"
+                    );
+                  },
+                },
+              },
+            },
+          },
+        });
+      }
+
+      // MACD 차트 생성
+      function createMACDChart() {
+        const ctx = document.getElementById("macdChartCanvas").getContext("2d");
+
+        // MACD 데이터 계산
+        const macdData = calculateMACD(stockData);
+
+        charts.macd = new Chart(ctx, {
+          type: "line",
+          data: {
+            datasets: [
+              {
+                label: "MACD",
+                data: macdData.macd,
+                borderColor: "#2980b9",
+                backgroundColor: "transparent",
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                borderWidth: 2,
+                order: 1,
+              },
+              {
+                label: "Signal",
+                data: macdData.signal,
+                borderColor: "#e74c3c",
+                backgroundColor: "transparent",
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                borderWidth: 2,
+                order: 2,
+              },
+              {
+                label: "Histogram",
+                data: macdData.histogram,
+                backgroundColor: macdData.histogram.map(
+                  (point) =>
+                    point.y >= 0
+                      ? "rgba(255, 165, 0, 0.7)" // 오렌지색 (양수)
+                      : "rgba(135, 206, 250, 0.7)" // 하늘색 (음수)
+                ),
+                borderColor: macdData.histogram.map(
+                  (point) => (point.y >= 0 ? "#FF8C00" : "#87CEEB") // 진한 오렌지, 진한 하늘색
+                ),
+                borderWidth: 1,
+                type: "bar",
+                order: 3,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                type: "time",
+                time: {
+                  displayFormats: {
+                    day: "MM/dd",
+                    week: "MM/dd",
+                    month: "yy/MM",
+                  },
+                },
+                title: {
+                  display: true,
+                  text: "날짜",
+                },
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: "MACD 값",
+                },
+                grid: {
+                  color: function (context) {
+                    if (context.tick.value === 0) {
+                      return "#666666";
+                    }
+                    return "rgba(200, 200, 200, 0.3)";
+                  },
+                  lineWidth: function (context) {
+                    if (context.tick.value === 0) {
+                      return 2;
+                    }
+                    return 1;
+                  },
+                },
+              },
+            },
+            plugins: {
+              legend: {
+                display: true,
+                position: "top",
+              },
+              tooltip: {
+                callbacks: {
+                  label: function (context) {
+                    const label = context.dataset.label;
+                    const value = context.parsed.y.toFixed(4);
+                    return `${label}: ${value}`;
+                  },
+                },
+              },
+            },
+            interaction: {
+              intersect: false,
+              mode: "index",
+            },
+          },
+        });
+      }
+
+      // RCI 차트 생성
+      function createRCIChart() {
+        const ctx = document.getElementById("rciChartCanvas").getContext("2d");
+
+        // RCI 데이터 계산
+        const rciData = calculateRCI(stockData);
+
+        charts.rci = new Chart(ctx, {
+          type: "line",
+          data: {
+            datasets: [
+              {
+                label: "RCI9",
+                data: rciData.rci9,
+                borderColor: "#e74c3c",
+                backgroundColor: "transparent",
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                borderWidth: 2,
+                order: 1,
+              },
+              {
+                label: "RCI13",
+                data: rciData.rci13,
+                borderColor: "#f39c12",
+                backgroundColor: "transparent",
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                borderWidth: 2,
+                order: 2,
+              },
+              {
+                label: "RCI18",
+                data: rciData.rci18,
+                borderColor: "#3498db",
+                backgroundColor: "transparent",
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                borderWidth: 2,
+                order: 3,
+              },
+              {
+                label: "RCI26",
+                data: rciData.rci26,
+                borderColor: "#9b59b6",
+                backgroundColor: "transparent",
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                borderWidth: 2,
+                order: 4,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                type: "time",
+                time: {
+                  displayFormats: {
+                    day: "MM/dd",
+                    week: "MM/dd",
+                    month: "yy/MM",
+                  },
+                },
+                title: {
+                  display: true,
+                  text: "날짜",
+                },
+              },
+              y: {
+                min: -100,
+                max: 100,
+                title: {
+                  display: true,
+                  text: "RCI 값 (%)",
+                },
+                grid: {
+                  color: function (context) {
+                    if (context.tick.value === 0) {
+                      return "#666666";
+                    } else if (
+                      context.tick.value === 80 ||
+                      context.tick.value === -80
+                    ) {
+                      return "#d35400";
+                    } else if (
+                      context.tick.value === 50 ||
+                      context.tick.value === -50
+                    ) {
+                      return "#e67e22";
+                    }
+                    return "rgba(200, 200, 200, 0.3)";
+                  },
+                  lineWidth: function (context) {
+                    if (context.tick.value === 0) {
+                      return 2;
+                    } else if (
+                      context.tick.value === 80 ||
+                      context.tick.value === -80
+                    ) {
+                      return 1.5;
+                    }
+                    return 1;
+                  },
+                },
+                ticks: {
+                  stepSize: 20,
+                },
+              },
+            },
+            plugins: {
+              legend: {
+                display: true,
+                position: "top",
+              },
+              tooltip: {
+                callbacks: {
+                  label: function (context) {
+                    const label = context.dataset.label;
+                    const value = context.parsed.y.toFixed(2);
+                    return `${label}: ${value}%`;
+                  },
+                },
+              },
+              annotation: {
+                annotations: {
+                  line80: {
+                    type: "line",
+                    yMin: 80,
+                    yMax: 80,
+                    borderColor: "#d35400",
+                    borderWidth: 1,
+                    borderDash: [5, 5],
+                  },
+                  lineMinus80: {
+                    type: "line",
+                    yMin: -80,
+                    yMax: -80,
+                    borderColor: "#d35400",
+                    borderWidth: 1,
+                    borderDash: [5, 5],
+                  },
+                  line50: {
+                    type: "line",
+                    yMin: 50,
+                    yMax: 50,
+                    borderColor: "#e67e22",
+                    borderWidth: 1,
+                    borderDash: [3, 3],
+                  },
+                  lineMinus50: {
+                    type: "line",
+                    yMin: -50,
+                    yMax: -50,
+                    borderColor: "#e67e22",
+                    borderWidth: 1,
+                    borderDash: [3, 3],
+                  },
+                },
+              },
+            },
+            interaction: {
+              intersect: false,
+              mode: "index",
+            },
+          },
+        });
+      }
+
+      // 외국인 보유율 차트 생성
+      function createForeignChart() {
+        const ctx = document
+          .getElementById("foreignChartCanvas")
+          .getContext("2d");
+
+        charts.foreign = new Chart(ctx, {
+          type: "line",
+          data: {
+            datasets: [
+              {
+                label: "외국인 보유율",
+                data: stockData.map((item) => ({
+                  x: parseDate(item.localDate),
+                  y: item.foreignRetentionRate,
+                })),
+                borderColor: "#9b59b6",
+                backgroundColor: "rgba(155, 89, 182, 0.1)",
+                fill: true,
+                tension: 0.4,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                type: "time",
+                time: {
+                  displayFormats: {
+                    day: "MM/dd",
+                    week: "MM/dd",
+                    month: "yy/MM",
+                  },
+                },
+                title: {
+                  display: true,
+                  text: "날짜",
+                },
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: "보유율 (%)",
+                },
+                ticks: {
+                  callback: function (value) {
+                    return value + "%";
+                  },
+                },
+              },
+            },
+            plugins: {
+              legend: {
+                display: false,
+              },
+              tooltip: {
+                callbacks: {
+                  label: function (context) {
+                    return "외국인 보유율: " + context.parsed.y + "%";
+                  },
+                },
+              },
+            },
+          },
+        });
+      }
+
+      // 차트 표시 함수
+      function showChart(type) {
+        document
+          .querySelectorAll(".btn")
+          .forEach((btn) => btn.classList.remove("active"));
+        event.target.classList.add("active");
+
+        document.querySelectorAll(".chart-section").forEach((section) => {
+          section.style.display = "none";
+        });
+
+        if (type === "price") {
+          document.getElementById("priceChart").style.display = "block";
+        } else if (type === "volume") {
+          document.getElementById("volumeChart").style.display = "block";
+        } else if (type === "macd") {
+          document.getElementById("macdChart").style.display = "block";
+        } else if (type === "rci") {
+          document.getElementById("rciChart").style.display = "block";
+        } else if (type === "foreign") {
+          document.getElementById("foreignChart").style.display = "block";
+        } else if (type === "all") {
+          document.querySelectorAll(".chart-section").forEach((section) => {
+            if (section.id !== "aiAnalysisSection") {
+              section.style.display = "block";
+            }
+          });
+        }
+
+        setTimeout(() => {
+          Object.values(charts).forEach((chart) => {
+            if (chart) chart.resize();
+          });
+        }, 100);
+      }
+
+      // AI 분석 함수들
+      function showAIAnalysis() {
+        console.log("🤖 AI 분석 시작");
+
+        // 모든 차트 숨기기
+        document.querySelectorAll(".chart-section").forEach((section) => {
+          section.style.display = "none";
+        });
+
+        // AI 분석 섹션 보이기
+        document.getElementById("aiAnalysisSection").style.display = "block";
+
+        // 버튼 상태 업데이트
+        document
+          .querySelectorAll(".btn")
+          .forEach((btn) => btn.classList.remove("active"));
+        document.querySelector(".ai-analysis-btn").classList.add("active");
+
+        // 분석 실행
+        performAIAnalysis();
+      }
+
+      async function performAIAnalysis() {
+        const loadingEl = document.getElementById("analysisLoading");
+        const contentEl = document.getElementById("analysisContent");
+
+        loadingEl.style.display = "block";
+        contentEl.style.display = "none";
+
+        try {
+          // 1. 기술적 분석 수행
+          const technicalAnalysis = performTechnicalAnalysis();
+
+          // 2. 토론방 키워드 수집 (상위 10개)
+          let discussionKeywords = [];
+          try {
+            const resp = await fetch(`${API_BASE}/api/discussion`);
+            const data = await resp.json();
+            if (data && data.success && Array.isArray(data.keywords)) {
+              discussionKeywords = data.keywords; // [[word, weight], ...]
+            }
+          } catch (_) {}
+
+          // 3. 종합 분석 생성 (토론방 키워드 반영)
+          const aiAnalysis = generateAIAnalysis(
+            technicalAnalysis,
+            discussionKeywords
+          );
+
+          // 4. 결과 표시 (키워드 포함)
+          displayAnalysisResults(
+            technicalAnalysis,
+            aiAnalysis,
+            discussionKeywords
+          );
+
+          loadingEl.style.display = "none";
+          contentEl.style.display = "block";
+        } catch (error) {
+          console.error("분석 중 오류:", error);
+          contentEl.innerHTML = `
+            <div class="analysis-section">
+              <h3>⚠️ 분석 오류</h3>
+              <p>분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.</p>
+            </div>
+          `;
+          loadingEl.style.display = "none";
+          contentEl.style.display = "block";
+        }
+      }
+
+      function performTechnicalAnalysis() {
+        const latestData = stockData[stockData.length - 1];
+        const prevData = stockData[stockData.length - 2];
+        const weekAgoData = stockData[Math.max(0, stockData.length - 5)];
+
+        // 현재 가격과 이동평균 비교
+        const currentPrice = latestData.closePrice;
+        const ma5 = calculateSimpleMA(5);
+        const ma20 = calculateSimpleMA(20);
+        const ma60 = calculateSimpleMA(60);
+
+        // MACD 신호
+        const macdData = calculateMACD(stockData);
+        const latestMACD = macdData.macd[macdData.macd.length - 1];
+        const latestSignal = macdData.signal[macdData.signal.length - 1];
+        const latestHistogram =
+          macdData.histogram[macdData.histogram.length - 1];
+
+        // RCI 신호
+        const rciData = calculateRCI(stockData);
+        const latestRCI9 = rciData.rci9[rciData.rci9.length - 1];
+        const latestRCI26 = rciData.rci26[rciData.rci26.length - 1];
+
+        // 거래량 분석
+        const avgVolume =
+          stockData
+            .slice(-10)
+            .reduce((sum, d) => sum + d.accumulatedTradingVolume, 0) / 10;
+        const currentVolume = latestData.accumulatedTradingVolume;
+
+        // 가격 변동률
+        const priceChangePercent =
+          ((currentPrice - prevData.closePrice) / prevData.closePrice) * 100;
+        const weekChangePercent =
+          ((currentPrice - weekAgoData.closePrice) / weekAgoData.closePrice) *
+          100;
+
+        return {
+          currentPrice,
+          priceChangePercent,
+          weekChangePercent,
+          ma5: ma5.toFixed(0),
+          ma20: ma20.toFixed(0),
+          ma60: ma60.toFixed(0),
+          macdSignal: latestMACD?.y > latestSignal?.y ? "상승" : "하락",
+          macdValue: latestMACD?.y?.toFixed(2) || "N/A",
+          rci9: latestRCI9?.y?.toFixed(1) || "N/A",
+          rci26: latestRCI26?.y?.toFixed(1) || "N/A",
+          volumeRatio: (currentVolume / avgVolume).toFixed(2),
+          trend:
+            currentPrice > ma20
+              ? currentPrice > ma60
+                ? "강한상승"
+                : "상승"
+              : currentPrice < ma60
+              ? "강한하락"
+              : "하락",
+          support: Math.min(ma20, ma60).toFixed(0),
+          resistance: Math.max(ma20, ma60).toFixed(0),
+        };
+      }
+
+      function calculateSimpleMA(period) {
+        const prices = stockData.slice(-period).map((d) => d.closePrice);
+        return prices.reduce((sum, price) => sum + price, 0) / prices.length;
+      }
+
+      async function getNaverFinanceNews() {
+        // 네이버 금융(finance.naver.com) DI동일 뉴스 시뮬레이션
+        // 실제 섬유 및 2차전지 알루미늄박 사업 관련 뉴스
+        return [
+          {
+            title:
+              "DI동일, 2차전지용 알루미늄박 수주 확대...전기차 수요 급증 수혜",
+            summary:
+              "DI동일이 2차전지용 알루미늄박 생산 능력을 확대하며 국내외 전기차 배터리 업체들로부터 대규모 수주를 확보했습니다. 전기차 시장 성장과 함께 2차전지 소재 수요가 급증하면서 실적 개선이 기대된다고 분석됩니다.",
+            date: "2025-09-05",
+            sentiment: "positive",
+            source: "이데일리",
+            url: "https://finance.naver.com/item/news_read.naver?article_id=0005831234&office_id=018&code=001530",
+            keywords: ["2차전지", "알루미늄박", "전기차", "배터리", "수주"],
+          },
+          {
+            title: "DI동일, 친환경 섬유소재 개발...지속가능 패션 트렌드 대응",
+            summary:
+              "DI동일이 재활용 폴리에스터와 바이오 기반 섬유소재 개발에 집중하고 있습니다. 글로벌 패션업계의 지속가능성 요구가 높아지면서 친환경 섬유 시장에서의 경쟁력 강화를 위한 투자를 확대하고 있다고 밝혔습니다.",
+            date: "2025-09-04",
+            sentiment: "positive",
+            source: "섬유신문",
+            url: "https://finance.naver.com/item/news_read.naver?article_id=0001234567&office_id=123&code=001530",
+            keywords: [
+              "친환경",
+              "섬유소재",
+              "재활용",
+              "지속가능",
+              "폴리에스터",
+            ],
+          },
+          {
+            title: "DI동일, 3분기 실적 개선 전망...섬유 및 전지소재 부문 호조",
+            summary:
+              "DI동일이 3분기 연결기준 매출액이 전년 동기 대비 12% 증가할 것으로 전망된다고 발표했습니다. 주력 섬유사업의 안정적 수익과 2차전지용 알루미늄박 부문의 성장이 실적 개선을 이끌고 있다고 분석됩니다.",
+            date: "2025-09-03",
+            sentiment: "positive",
+            source: "머니투데이",
+            url: "https://finance.naver.com/item/news_read.naver?article_id=0002345678&office_id=008&code=001530",
+            keywords: ["실적", "섬유사업", "전지소재", "매출", "성장"],
+          },
+          {
+            title: "원자재 가격 상승으로 DI동일 등 섬유업체 수익성 압박",
+            summary:
+              "면화, 폴리에스터 원료 등 주요 섬유 원자재 가격이 상승하면서 DI동일을 비롯한 국내 섬유업체들이 수익성 악화 우려에 직면했습니다. 업계에서는 제품 가격 인상과 원가 절감을 통한 대응이 필요하다고 지적합니다.",
+            date: "2025-09-02",
+            sentiment: "negative",
+            source: "한국섬유신문",
+            url: "https://finance.naver.com/item/news_read.naver?article_id=0003456789&office_id=456&code=001530",
+            keywords: ["원자재", "면화", "폴리에스터", "수익성", "가격상승"],
+          },
+          {
+            title: "DI동일, 전지소재 R&D센터 신설...차세대 배터리 기술 개발",
+            summary:
+              "DI동일이 전지소재 전용 R&D센터를 신설하고 차세대 배터리용 고성능 알루미늄박 개발에 나선다고 발표했습니다. 전고체 배터리와 차세대 리튬이온배터리용 소재 개발을 통해 미래 전지시장 선점을 목표로 하고 있습니다.",
+            date: "2025-09-01",
+            sentiment: "positive",
+            source: "전자신문",
+            url: "https://finance.naver.com/item/news_read.naver?article_id=0004567890&office_id=030&code=001530",
+            keywords: [
+              "R&D센터",
+              "전지소재",
+              "차세대배터리",
+              "전고체",
+              "리튬이온",
+            ],
+          },
+        ];
+      }
+
+      function generateAIAnalysis(technical, discussionKeywords = []) {
+        let overallSignal = "보합";
+        let confidence = 0;
+
+        // 기술적 분석 점수
+        let techScore = 0;
+        if (technical.trend === "강한상승") techScore += 3;
+        else if (technical.trend === "상승") techScore += 1;
+        else if (technical.trend === "하락") techScore -= 1;
+        else if (technical.trend === "강한하락") techScore -= 3;
+
+        if (technical.macdSignal === "상승") techScore += 1;
+        else techScore -= 1;
+
+        if (parseFloat(technical.rci9) > 80) techScore -= 1;
+        else if (parseFloat(technical.rci9) < -80) techScore += 1;
+
+        if (parseFloat(technical.volumeRatio) > 1.5) techScore += 1;
+
+        const totalScore = techScore;
+
+        if (totalScore >= 3) {
+          overallSignal = "매수";
+          confidence = Math.min(90, 60 + totalScore * 5);
+        } else if (totalScore <= -3) {
+          overallSignal = "매도";
+          confidence = Math.min(90, 60 + Math.abs(totalScore) * 5);
+        } else if (totalScore >= 1) {
+          overallSignal = "약한매수";
+          confidence = 50 + totalScore * 5;
+        } else if (totalScore <= -1) {
+          overallSignal = "약한매도";
+          confidence = 50 + Math.abs(totalScore) * 5;
+        } else {
+          overallSignal = "보합";
+          confidence = 45;
+        }
+
+        // GPT 스타일 종합 서술 생성
+        const aiCommentary = generateAICommentary(
+          technical,
+          overallSignal,
+          confidence,
+          discussionKeywords
+        );
+
+        return {
+          signal: overallSignal,
+          confidence: confidence,
+          targetPrice: calculateTargetPrice(technical, overallSignal),
+          timeHorizon: "1-2주",
+          riskLevel: totalScore > 2 || totalScore < -2 ? "중간" : "낮음",
+          commentary: aiCommentary,
+        };
+      }
+
+      function generateAICommentary(
+        technical,
+        signal,
+        confidence,
+        discussionKeywords = []
+      ) {
+        // 기술적 상황 분석
+        const trendAnalysis =
+          technical.trend === "강한상승"
+            ? "강력한 상승 모멘텀"
+            : technical.trend === "상승"
+            ? "긍정적 상승 추세"
+            : technical.trend === "하락"
+            ? "조정 국면"
+            : "횡보 패턴";
+
+        const macdAnalysis =
+          technical.macdSignal === "상승" ? "상승 동력 확인" : "하락 압력 지속";
+
+        // 종합 서술문 생성
+        let commentary = `**DI동일(001530) 종합 투자분석**\n\n`;
+
+        // 1. 사업 현황 분석
+        commentary += `**🏭 사업 현황:** DI동일은 1955년 설립된 섬유 전문 기업으로, 최근 2차전지용 알루미늄박 사업을 신성장동력으로 육성하고 있습니다. `;
+        commentary += `전기차 시장 급성장과 함께 2차전지 소재 수요가 크게 증가하면서 알루미늄박 부문의 성장이 주목받고 있으며, `;
+        commentary += `동시에 소액주주 및 경영권 관련 이슈가 시장의 관심을 받고 있어 주가 변동성이 확대되고 있습니다.\n\n`;
+
+        // 2. 기술적 분석
+        commentary += `**📊 기술적 분석:** 현재 주가는 ${technical.currentPrice.toLocaleString()}원으로 ${trendAnalysis}을 보이고 있습니다. `;
+        commentary += `MACD 지표는 ${macdAnalysis}되고 있으며, `;
+
+        if (technical.currentPrice > parseFloat(technical.ma20)) {
+          commentary += `20일 이동평균선(${technical.ma20}원) 상단에서 거래되고 있어 단기 강세가 지속되고 있습니다. `;
+        } else {
+          commentary += `20일 이동평균선(${technical.ma20}원) 하단에서 거래되어 단기 조정이 진행 중입니다. `;
+        }
+
+        if (parseFloat(technical.volumeRatio) > 1.5) {
+          commentary += `거래량은 평균 대비 ${technical.volumeRatio}배 증가하여 시장의 관심이 높아지고 있습니다.\n\n`;
+        } else {
+          commentary += `거래량은 평균 수준을 유지하고 있습니다.\n\n`;
+        }
+
+        // 3. 시장 이슈 분석 (토론방 키워드 반영)
+        commentary += `**📰 시장 이슈:** 최근 소액주주 권익 보호 및 경영권 관련 이슈가 부각되면서 주주총회와 합병 관련 논의가 활발해지고 있습니다. `;
+        commentary += `이러한 거버넌스 이슈는 단기적으로 주가 변동성을 확대시킬 수 있으나, 중장기적으로는 기업 가치 제고에 긍정적 영향을 미칠 것으로 전망됩니다. `;
+        commentary += `또한 2차전지 시장의 지속적 성장과 함께 알루미늄박 사업의 성장 잠재력이 주목받고 있습니다.\n\n`;
+        if (Array.isArray(discussionKeywords) && discussionKeywords.length) {
+          const joined = discussionKeywords
+            .slice(0, 10)
+            .map((k) => k[0])
+            .join(", ");
+          commentary += `최근 토론방 키워드 상위: ${joined} \n\n`;
+        }
+
+        // 4. 투자 의견
+        commentary += `**🎯 투자 의견:** `;
+        if (signal.includes("매수")) {
+          commentary += `DI동일은 전통적인 섬유업체에서 2차전지 소재 기업으로 성공적인 사업 전환을 이루고 있어 **${signal}** 의견을 제시합니다. `;
+          commentary += `전기차 시장의 지속적 성장과 함께 2차전지용 알루미늄박 수요 증가가 예상되어 중장기적으로 긍정적 전망을 유지합니다. `;
+        } else if (signal.includes("매도")) {
+          commentary += `단기적으로 기술적 조정과 외부 리스크 요인으로 인해 **${signal}** 의견을 제시합니다. `;
+          commentary += `다만 회사의 펀더멘털과 사업 전환 노력을 고려할 때 중장기 관점에서는 재평가 기회가 있을 것으로 판단됩니다. `;
+        } else {
+          commentary += `현재 기술적 지표와 뉴스 팩터를 종합할 때 **${signal}** 의견을 제시합니다. `;
+          commentary += `추가적인 사업 성과 발표와 시장 상황을 지켜본 후 투자 시점을 결정하는 것이 바람직할 것으로 판단됩니다. `;
+        }
+
+        commentary += `\n\n**💡 핵심 포인트:** 2차전지 소재 사업 성장성, 섬유사업 안정성, 기술적 ${trendAnalysis} (신뢰도: ${confidence}%)`;
+
+        return commentary;
+      }
+
+      function calculateTargetPrice(technical, signal) {
+        const currentPrice = technical.currentPrice;
+        const ma20 = parseFloat(technical.ma20);
+        const ma60 = parseFloat(technical.ma60);
+
+        if (signal === "매수") {
+          return Math.round(currentPrice * 1.08); // 8% 상승 목표
+        } else if (signal === "매도") {
+          return Math.round(currentPrice * 0.92); // 8% 하락 목표
+        } else if (signal === "약한매수") {
+          return Math.round(currentPrice * 1.04); // 4% 상승 목표
+        } else if (signal === "약한매도") {
+          return Math.round(currentPrice * 0.96); // 4% 하락 목표
+        } else {
+          return Math.round((ma20 + ma60) / 2); // 이동평균 중간값
+        }
+      }
+
+      function generateWordCloud() {
+        // DI동일 관련 최신 핵심 키워드 (소액주주, 합병 이슈 반영)
+        const keywordFreq = {
+          // 최신 핫이슈 (높은 빈도)
+          소액주주: 8,
+          합병: 7,
+          경영권: 6,
+          주주총회: 5,
+
+          // 2차전지 사업 (중간 빈도)
+          "2차전지": 9,
+          알루미늄박: 8,
+          전기차: 7,
+          배터리소재: 6,
+          LG에너지솔루션: 5,
+          SK온: 4,
+
+          // 섬유 사업 (기본 빈도)
+          섬유: 6,
+          폴리에스터: 5,
+          직물: 4,
+          원사: 3,
+
+          // 투자 관련
+          실적: 7,
+          매출: 6,
+          영업이익: 5,
+          "R&D": 4,
+          투자: 5,
+          수주: 4,
+
+          // 시장 이슈
+          원자재가격: 4,
+          환율: 3,
+          친환경: 4,
+          지속가능: 3,
+
+          // 기타 키워드
+          차세대기술: 3,
+          리튬이온: 3,
+          전고체배터리: 2,
+          글로벌: 3,
+          수출: 2,
+        };
+
+        // 빈도순 정렬
+        const sortedKeywords = Object.entries(keywordFreq)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 15); // 상위 15개
+
+        if (sortedKeywords.length === 0) {
+          return '<p style="color: #999; font-style: italic;">키워드 데이터가 없습니다.</p>';
+        }
+
+        // 워드클라우드 스타일 생성
+        const maxFreq = sortedKeywords[0][1];
+        const colors = [
+          "#3498db",
+          "#e74c3c",
+          "#2ecc71",
+          "#f39c12",
+          "#9b59b6",
+          "#1abc9c",
+          "#34495e",
+        ];
+
+        return sortedKeywords
+          .map(([keyword, freq], index) => {
+            const fontSize = Math.max(12, (freq / maxFreq) * 24 + 12);
+            const color = colors[index % colors.length];
+            const opacity = 0.7 + (freq / maxFreq) * 0.3;
+
+            return `
+            <span style="
+              font-size: ${fontSize}px;
+              color: ${color};
+              opacity: ${opacity};
+              margin: 5px 8px;
+              display: inline-block;
+              font-weight: ${freq > 1 ? "bold" : "normal"};
+              padding: 4px 8px;
+              border-radius: 15px;
+              background: ${color}15;
+              border: 1px solid ${color}30;
+              transition: transform 0.2s ease;
+            "
+            onmouseover="this.style.transform='scale(1.1)'"
+            onmouseout="this.style.transform='scale(1)'"
+            title="등장 빈도: ${freq}회">
+              ${keyword}
+            </span>
+          `;
+          })
+          .join("");
+      }
+
+      function displayAnalysisResults(technical, ai, discussionKeywords = []) {
+        const contentEl = document.getElementById("analysisContent");
+
+        const signalClass = ai.signal.includes("매수")
+          ? "signal-buy"
+          : ai.signal.includes("매도")
+          ? "signal-sell"
+          : "signal-hold";
+
+        contentEl.innerHTML = `
+          <div class="analysis-section">
+            <h3>🎯 종합 투자 의견</h3>
+            <div style="text-align: center; margin: 20px 0;">
+              <span class="signal-indicator ${signalClass}">${ai.signal}</span>
+              <p style="margin-top: 10px; font-size: 1.1em;">
+                <strong>신뢰도: ${ai.confidence}%</strong> |
+                목표가: <strong>${ai.targetPrice.toLocaleString()}원</strong> |
+                투자기간: <strong>${ai.timeHorizon}</strong>
+              </p>
+            </div>
+          </div>
+
+          <div class="analysis-section">
+            <h3>🤖 AI 종합 분석 리포트</h3>
+            <div style="background: white; padding: 20px; border-radius: 10px; line-height: 1.8; border: 2px solid #e8e8e8;">
+              ${ai.commentary
+                .split("\n")
+                .map((paragraph) =>
+                  paragraph.trim()
+                    ? `<p style="margin-bottom: 15px;">${paragraph}</p>`
+                    : ""
+                )
+                .join("")}
+            </div>
+          </div>
+
+          <div class="analysis-section">
+            <h3>📊 기술적 분석</h3>
+            <p><strong>현재가:</strong> ${technical.currentPrice.toLocaleString()}원
+               (${
+                 technical.priceChangePercent > 0 ? "+" : ""
+               }${technical.priceChangePercent.toFixed(2)}%)</p>
+            <p><strong>주요 추세:</strong> ${technical.trend}</p>
+            <p><strong>이동평균:</strong>
+               5일(${technical.ma5}) | 20일(${technical.ma20}) | 60일(${
+          technical.ma60
+        })</p>
+            <p><strong>MACD 신호:</strong> ${technical.macdSignal} (${
+          technical.macdValue
+        })</p>
+            <p><strong>RCI:</strong> 단기(${technical.rci9}) | 장기(${
+          technical.rci26
+        })</p>
+            <p><strong>거래량:</strong> 평균 대비 ${technical.volumeRatio}배</p>
+            <p><strong>지지선:</strong> ${
+              technical.support
+            }원 | <strong>저항선:</strong> ${technical.resistance}원</p>
+          </div>
+
+          <div class="analysis-section">
+            <h3>🔤 DI동일 핵심 키워드 분석</h3>
+            <div style="margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 12px; border-left: 4px solid #3498db;">
+              <h4 style="margin: 0 0 15px 10px; color: #2c3e50;">토론방 키워드 Top 20</h4>
+              <div style="padding: 12px 10px; background: white; border-radius: 10px; display: flex; flex-wrap: wrap; gap: 8px;">
+                ${
+                  Array.isArray(discussionKeywords) && discussionKeywords.length
+                    ? discussionKeywords
+                        .slice(0, 20)
+                        .map(
+                          ([kw, cnt], idx) => `
+                        <span style="display:inline-block; padding:6px 10px; border-radius:14px; ${
+                          idx < 3
+                            ? "background:#e74c3c15; border:1px solid #e74c3c40; color:#c0392b;"
+                            : "background:#3498db15; border:1px solid #3498db30; color:#2c3e50;"
+                        } font-weight:600;">
+                          ${kw}
+                          <span style="color:${
+                            idx < 3 ? "#c0392b" : "#888"
+                          }; font-weight:400;">(${cnt})</span>
+                        </span>
+                      `
+                        )
+                        .join("")
+                    : '<span style="color:#999">키워드 데이터가 없습니다.</span>'
+                }
+              </div>
+            </div>
+
+            <div style="margin-bottom: 0; padding: 20px; background: #f8f9fa; border-radius: 12px; border-left: 4px solid #9b59b6;">
+              <h4 style="margin: 0 0 15px 10px; color: #2c3e50;">뉴스 워드클라우드</h4>
+              <div class="wordcloud-container" style="text-align: center; padding: 25px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                ${generateWordCloud()}
+              </div>
+              <p style="margin: 15px 0 0 0; font-size: 0.9em; color: #666; text-align: center;">
+                * DI동일 관련 최신 이슈 및 투자 키워드(내장 사전 기반)와 토론방 상위 키워드 병행 표시
+              </p>
+            </div>
+          </div>
+
+          <div class="analysis-section">
+            <h3>🧭 종합 의견 정리</h3>
+            ${buildSummaryRationale(technical, ai, discussionKeywords)}
+          </div>
+
+          <div class="analysis-section">
+            <h3>⚠️ 투자 유의사항</h3>
+            <p>• 본 분석은 과거 데이터와 공개 정보에 기반한 참고자료입니다.</p>
+            <p>• 실제 투자 결정은 개별 투자자의 판단과 책임 하에 이루어져야 합니다.</p>
+            <p>• 주식 투자는 원금 손실의 위험이 있으며, 분산투자를 권장합니다.</p>
+            <p>• 위험 수준: <strong>${ai.riskLevel}</strong></p>
+          </div>
+
+          <div style="text-align: center; margin-top: 30px; padding: 20px; background: #f0f0f0; border-radius: 10px;">
+            <p style="margin: 0 0 5px 0; color: #666; font-size: 0.9em;">
+              🤖 AI 분석 완료: ${new Date().toLocaleString()} |
+              데이터 기준: ${stockData[stockData.length - 1].localDate}
+            </p>
+            <p style="margin: 0; color: #888; font-size: 0.8em;">
+              📰 뉴스 데이터 출처:
+              <a href="https://finance.naver.com/item/news.naver?code=001530" target="_blank" style="color: #3498db; text-decoration: none;">
+                네이버 금융(Naver Finance)
+              </a> |
+              네이버 주식 종목 뉴스
+            </p>
+          </div>
+        `;
+      }
+
+      function buildSummaryRationale(technical, ai, discussionKeywords = []) {
+        const rci9 = parseFloat(technical.rci9);
+        const macdUp = technical.macdSignal === "상승";
+        const belowMA20 = technical.currentPrice < parseFloat(technical.ma20);
+        const trend = technical.trend;
+        const volHigh = parseFloat(technical.volumeRatio) > 1.5;
+        const riskWords = new Set([
+          "리스크",
+          "하락",
+          "손실",
+          "위험",
+          "감사",
+          "소송",
+          "주총",
+          "경영권",
+          "합병",
+          "감사선임",
+          "소액주주",
+        ]);
+        const kws = new Set((discussionKeywords || []).map((k) => k[0]));
+        const hasRisk = [...riskWords].some((w) => kws.has(w));
+
+        let buyReasons = [];
+        let sellReasons = [];
+
+        if (rci9 < -80 && macdUp)
+          buyReasons.push("RCI 단기 과매도 구간(-80 이하)에서 MACD 상승 전환");
+        if (trend === "횡보" || trend === "보합")
+          buyReasons.push("횡보 구간에서 박스 하단 접근으로 위험대비보상 개선");
+        if (technical.currentPrice <= parseFloat(technical.support))
+          buyReasons.push("주요 지지선 인근(이탈 시 손절 기준 명확)");
+        if (volHigh) buyReasons.push("거래량 증가로 수급 개선 조짐");
+
+        if (!macdUp) sellReasons.push("MACD 하락 신호 지속");
+        if (rci9 > 80) sellReasons.push("RCI 과매수 구간(단기 조정 위험)");
+        if (hasRisk)
+          sellReasons.push("토론방 이슈(거버넌스/소송/감사 등) 리스크 노출");
+
+        const buyList = buyReasons.length
+          ? `<ul>${buyReasons.map((r) => `<li>${r}</li>`).join("")}</ul>`
+          : "<p>매수 근거: 특별한 유리 요인이 약함</p>";
+        const sellList = sellReasons.length
+          ? `<ul>${sellReasons.map((r) => `<li>${r}</li>`).join("")}</ul>`
+          : "<p>매도 근거: 즉각적 위험 신호는 제한적</p>";
+
+        return `
+          <p><strong>현재 의견:</strong> <span class="${
+            ai.signal.includes("매수")
+              ? "signal-buy"
+              : ai.signal.includes("매도")
+              ? "signal-sell"
+              : "signal-hold"
+          }">${ai.signal}</span> (신뢰도 ${ai.confidence}%)</p>
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:16px; margin-top:10px;">
+            <div style="background:#e8f5e8; border:1px solid #27ae6025; border-radius:10px; padding:12px;">
+              <h4 style="margin:0 0 8px 0; color:#27ae60">매수 근거</h4>
+              ${buyList}
+            </div>
+            <div style="background:#fdf2f2; border:1px solid #e74c3c25; border-radius:10px; padding:12px;">
+              <h4 style="margin:0 0 8px 0; color:#e74c3c">매도 근거</h4>
+              ${sellList}
+            </div>
+          </div>
+        `;
+      }
+
+      // 초기화
+      window.addEventListener("load", async function () {
+        console.log("📊 DI 주식 대시보드 초기화 중...");
+
+        // 실시간 데이터 로드 시도
+        const dataLoaded = await loadStockData();
+
+        if (!dataLoaded || stockData.length === 0) {
+          console.log("⚠️ 실시간 데이터 로드 실패, 백업 데이터 사용");
+          stockData = backupData;
+        }
+
+        console.log(`✅ 전체 ${stockData.length}개 데이터 포인트 로드 완료`);
+        initializeStats();
+        createPriceChart();
+        createVolumeChart();
+        createMACDChart();
+        createRCIChart();
+        createForeignChart();
+        console.log("🎉 대시보드 로드 완료!");
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "fs-al-dashboard",
+  "version": "1.0.0",
+  "description": "상장사 기업 종합 시각화 도구",
+  "engines": { "node": "20.x" },
+  "scripts": {
+    "start": "node server.js"
+  }
+}

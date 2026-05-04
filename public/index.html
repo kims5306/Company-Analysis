@@ -1,0 +1,2566 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>기업 종합 시각화 분석</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3250;
+      --accent: #4f7fff;
+      --accent2: #7c5cfc;
+      --text: #e8eaf6;
+      --text-muted: #8b8fa8;
+      --success: #3dd68c;
+      --danger: #f87171;
+      --orange: #fb923c;
+      --purple: #a78bfa;
+      --radius: 12px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Pretendard', 'Noto Sans KR', -apple-system, BlinkMacSystemFont,
+        'Segoe UI', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(26, 29, 39, 0.95);
+      backdrop-filter: blur(10px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 16px; color: #fff; flex-shrink: 0;
+    }
+
+    .logo-text {
+      font-size: 18px; font-weight: 700;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+
+    .header-badge {
+      margin-left: auto;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--text-muted);
+    }
+
+    .header-badge span { color: var(--success); font-weight: 700; }
+
+    /* ── Search View ── */
+    #searchView { max-width: 900px; margin: 0 auto; padding: 60px 24px 80px; }
+
+    .hero { text-align: center; margin-bottom: 48px; }
+
+    .hero h2 { font-size: 36px; font-weight: 800; line-height: 1.2; margin-bottom: 12px; }
+
+    .hero h2 em {
+      font-style: normal;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+
+    .hero p { color: var(--text-muted); font-size: 15px; margin-bottom: 20px; }
+
+    .hint-chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+    .hint-chip {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; padding: 6px 14px; font-size: 13px;
+      color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+    }
+
+    .hint-chip:hover { border-color: var(--accent); color: var(--accent); background: rgba(79,127,255,0.08); }
+
+    .search-box { position: relative; margin-bottom: 24px; }
+
+    .search-icon { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
+
+    #searchInput {
+      width: 100%; padding: 18px 48px 18px 52px;
+      background: var(--surface); border: 1.5px solid var(--border);
+      border-radius: var(--radius); color: var(--text); font-size: 16px; outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    #searchInput::placeholder { color: var(--text-muted); }
+
+    #searchInput:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79,127,255,0.15); }
+
+    .clear-btn {
+      position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+      background: var(--surface2); border: none; border-radius: 6px;
+      width: 28px; height: 28px; display: none; align-items: center; justify-content: center;
+      color: var(--text-muted); cursor: pointer; font-size: 14px; transition: all 0.15s;
+    }
+
+    .clear-btn:hover { background: var(--border); color: var(--text); }
+    .clear-btn.visible { display: flex; }
+
+    .status-bar {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 14px; font-size: 13px; color: var(--text-muted); min-height: 20px;
+    }
+
+    .status-bar .count { color: var(--accent); font-weight: 700; }
+
+    .results-grid { display: flex; flex-direction: column; gap: 8px; }
+
+    .result-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 16px;
+      display: flex; align-items: center; gap: 12px;
+      transition: border-color 0.15s, background 0.15s;
+      position: relative; overflow: hidden;
+    }
+
+    .result-card::before {
+      content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+      background: linear-gradient(180deg, var(--accent), var(--accent2));
+      opacity: 0; transition: opacity 0.15s;
+    }
+
+    .result-card:hover { border-color: var(--accent); background: var(--surface2); }
+    .result-card:hover::before { opacity: 1; }
+
+    .card-main { flex: 1; min-width: 0; }
+
+    .corp-name { font-size: 15px; font-weight: 700; margin-bottom: 3px; }
+
+    .corp-eng { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .card-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
+
+    .corp-code-badge {
+      background: rgba(79,127,255,0.12); border: 1px solid rgba(79,127,255,0.3);
+      border-radius: 6px; padding: 3px 10px; font-size: 13px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      color: var(--accent); font-weight: 600; letter-spacing: 0.5px; cursor: pointer;
+    }
+
+    .corp-code-badge:hover { background: rgba(79,127,255,0.2); }
+
+    .stock-badge {
+      background: rgba(61,214,140,0.1); border: 1px solid rgba(61,214,140,0.25);
+      border-radius: 6px; padding: 2px 8px; font-size: 11px; color: var(--success); font-family: monospace;
+    }
+
+    .no-stock {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 2px 8px; font-size: 11px; color: var(--text-muted);
+    }
+
+    .analyze-btn {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none; border-radius: 8px; padding: 6px 12px;
+      color: #fff; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: opacity 0.15s, transform 0.1s; white-space: nowrap;
+    }
+
+    .analyze-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+    .analyze-btn:active { transform: translateY(0); }
+
+    .empty-state { text-align: center; padding: 64px 24px; color: var(--text-muted); }
+    .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+
+    /* ── Analysis View ── */
+    #analysisView { display: none; max-width: 1200px; margin: 0 auto; padding: 32px 24px 80px; }
+
+    .an-top {
+      display: flex; align-items: flex-start; gap: 16px;
+      margin-bottom: 28px; flex-wrap: wrap;
+    }
+
+    .back-btn {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 9px 14px; color: var(--text-muted); font-size: 13px;
+      cursor: pointer; transition: all 0.15s; white-space: nowrap; flex-shrink: 0; margin-top: 2px;
+    }
+
+    .back-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .an-corp-info { flex: 1; min-width: 180px; }
+
+    .an-corp-name { font-size: 26px; font-weight: 800; margin-bottom: 8px; }
+
+    .an-corp-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .meta-tag {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 3px 10px; font-size: 12px; color: var(--text-muted);
+      font-family: monospace;
+    }
+
+    .meta-tag strong { color: var(--text); font-weight: 600; }
+
+    .an-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+
+    .an-controls select {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 10px; color: var(--text); font-size: 13px; cursor: pointer; outline: none;
+    }
+
+    .an-controls select:focus { border-color: var(--accent); }
+
+    .fs-toggle { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+
+    .fs-btn {
+      padding: 8px 14px; border: none; background: transparent;
+      color: var(--text-muted); font-size: 13px; cursor: pointer; transition: all 0.15s;
+    }
+
+    .fs-btn.active { background: var(--accent); color: #fff; font-weight: 700; }
+    .fs-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* ── Loading / Error ── */
+    .an-state {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 80px 24px; gap: 14px; color: var(--text-muted);
+    }
+
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .err-icon { font-size: 40px; }
+
+    /* ── KPI Grid ── */
+    .kpi-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 12px; margin-bottom: 16px;
+    }
+
+    @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 480px) { .kpi-grid { grid-template-columns: 1fr; } }
+
+    .kpi-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px 22px;
+    }
+
+    .kpi-label { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; font-weight: 500; letter-spacing: 0.3px; }
+
+    .kpi-val { font-size: 26px; font-weight: 800; line-height: 1; margin-bottom: 6px; }
+
+    .kpi-unit { font-size: 13px; color: var(--text-muted); font-weight: 400; margin-left: 3px; }
+
+    .kpi-chg { font-size: 12px; display: flex; align-items: center; gap: 3px; }
+
+    .kpi-chg.up { color: var(--success); }
+    .kpi-chg.down { color: var(--danger); }
+
+    /* ── Stock KPI 카드 (6개 가로 행) ── */
+    .stock-kpi-grid {
+      display: grid; grid-template-columns: repeat(6, 1fr);
+      gap: 10px; margin-bottom: 16px;
+    }
+    @media (max-width: 1100px) { .stock-kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 600px)  { .stock-kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    .stock-kpi-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 16px;
+    }
+    .stock-kpi-label { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; font-weight: 500; letter-spacing: 0.3px; }
+    .stock-kpi-val   { font-size: 17px; font-weight: 800; line-height: 1.2; }
+    .stock-kpi-sub   { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+    /* ── Charts ── */
+    .charts-row1 { margin-bottom: 14px; }
+
+    .charts-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+    @media (max-width: 768px) { .charts-row2 { grid-template-columns: 1fr; } }
+
+    .chart-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px 24px 20px;
+    }
+
+    .chart-title { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+
+    .chart-sub { font-size: 11px; color: var(--text-muted); margin-bottom: 18px; }
+
+    .chart-wrap { position: relative; height: 300px; }
+    .chart-wrap.sm { height: 260px; }
+
+    /* Y축 세로 레이블 래퍼 */
+    .chart-outer { display: flex; align-items: stretch; }
+    .chart-outer > .chart-wrap,
+    .chart-outer > .stock-chart-wrap { flex: 1; min-width: 0; }
+    .y-lbl {
+      display: flex; align-items: center; justify-content: center;
+      writing-mode: vertical-lr; text-orientation: upright;
+      color: #8b8fa8; font-size: 11px; font-family: 'Malgun Gothic','Noto Sans KR',sans-serif;
+      padding: 0 4px; flex-shrink: 0; letter-spacing: 1px;
+    }
+
+    /* ── Balance Sheet Box ── */
+    .bs-box-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px; margin-bottom: 14px;
+    }
+
+    .bs-box-header {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+    }
+
+    .bs-box-header h3 { font-size: 14px; font-weight: 700; }
+    .bs-box-header span { font-size: 11px; color: var(--text-muted); }
+
+    .bs-wrap {
+      display: flex; gap: 8px; height: 340px; align-items: stretch;
+    }
+
+    .bs-col {
+      display: flex; flex-direction: column; flex: 1; height: 100%; overflow: hidden;
+      border-radius: 8px; gap: 2px;
+    }
+
+    .bs-label-col {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; width: 32px; flex-shrink: 0;
+    }
+
+    .bs-axis-label {
+      writing-mode: vertical-lr; text-orientation: mixed;
+      font-size: 11px; font-weight: 700; color: var(--text-muted);
+      letter-spacing: 2px;
+    }
+
+    .bs-seg {
+      position: relative; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden; transition: filter 0.2s; cursor: default;
+      border-radius: 6px; min-height: 28px;
+    }
+
+    .bs-seg:hover { filter: brightness(1.15); }
+
+    .bs-seg-inner {
+      display: flex; flex-direction: row; align-items: center;
+      gap: 5px; width: 100%; padding: 0 10px;
+      justify-content: center; white-space: nowrap;
+      overflow: hidden; pointer-events: none;
+    }
+
+    .bs-seg-name {
+      font-size: 12px; font-weight: 700; color: #fff;
+      flex-shrink: 0;
+    }
+    .bs-seg-sep  { font-size: 11px; color: rgba(255,255,255,0.4); flex-shrink: 0; }
+    .bs-seg-val  { font-size: 11px; color: rgba(255,255,255,0.9); flex-shrink: 0; }
+    .bs-seg-pct  { font-size: 11px; color: rgba(255,255,255,0.65); flex-shrink: 0; }
+
+    .bs-seg.cur-assets    { background: linear-gradient(160deg, #4f7fff, #3b6be8); }
+    .bs-seg.noncur-assets { background: linear-gradient(160deg, #7c5cfc, #6144e0); }
+    .bs-seg.cur-liab      { background: linear-gradient(160deg, #f87171, #e05555); }
+    .bs-seg.noncur-liab   { background: linear-gradient(160deg, #fb923c, #e07020); }
+    .bs-seg.equity        { background: linear-gradient(160deg, #3dd68c, #28b874); }
+
+    .bs-divider { display: none; }
+
+    .bs-footer {
+      display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;
+    }
+
+    .bs-legend {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 11px; color: var(--text-muted);
+    }
+
+    .bs-legend-dot {
+      width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
+    }
+
+    /* ── Report View ── */
+    #reportView { display:none; }
+
+    .rv-wrap {
+      max-width: 860px; margin: 0 auto; padding: 40px 24px 80px;
+    }
+
+    .rv-top {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 28px;
+    }
+
+    .rv-corp-info { flex: 1; }
+
+    .rv-corp-name {
+      font-size: 24px; font-weight: 800; color: var(--text); margin-bottom: 6px;
+    }
+
+    .rv-corp-meta {
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+
+    .rv-section-title {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 15px; font-weight: 700; color: var(--text);
+      margin-bottom: 14px; padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .rv-section-title span {
+      font-size: 12px; color: var(--text-muted); font-weight: 400;
+    }
+
+    .rv-report-list {
+      display: flex; flex-direction: column; gap: 8px;
+    }
+
+    .rv-report-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px 20px;
+      display: flex; align-items: center; gap: 16px;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .rv-report-card:hover { border-color: var(--accent); background: var(--surface2); }
+
+    .rv-report-card.rv-latest { border-color: var(--accent); }
+
+    .rv-report-icon {
+      width: 36px; height: 36px; border-radius: 8px;
+      background: rgba(99,102,241,0.12); display: flex;
+      align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+    }
+
+    .rv-report-info { flex: 1; min-width: 0; }
+
+    .rv-report-nm {
+      font-size: 14px; font-weight: 700; color: var(--text);
+      margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .rv-report-date {
+      font-size: 12px; color: var(--text-muted);
+    }
+
+    .rv-report-actions {
+      display: flex; gap: 8px; flex-shrink: 0;
+    }
+
+    .rv-btn-analyze {
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 7px;
+      padding: 7px 16px; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s;
+    }
+
+    .rv-btn-analyze:hover { background: #5254cc; }
+
+    .rv-btn-doc {
+      background: transparent; color: var(--text-muted);
+      border: 1px solid var(--border); border-radius: 7px;
+      padding: 7px 14px; font-size: 13px; cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+    }
+
+    .rv-btn-doc:hover { color: var(--text); border-color: var(--text-muted); }
+
+    .rv-empty {
+      text-align: center; padding: 60px 20px;
+      color: var(--text-muted); font-size: 14px;
+    }
+
+    .rv-loading {
+      display: flex; align-items: center; gap: 12px;
+      padding: 50px; color: var(--text-muted); font-size: 14px;
+      justify-content: center;
+    }
+
+    .rv-report-tag {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      background: rgba(99,102,241,0.15); color: var(--accent);
+      border-radius: 4px; padding: 1px 6px; margin-right: 4px; vertical-align: middle;
+    }
+
+    /* ── Stock Charts ── */
+    .stock-section {
+      margin-bottom: 14px; display: none;
+    }
+
+    .stock-section-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .stock-section-header h3 { font-size: 15px; font-weight: 700; }
+
+    .stock-code-badge {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 2px 10px; font-size: 12px;
+      color: var(--text-muted); font-family: monospace;
+    }
+
+    .stock-loading {
+      display: flex; align-items: center; gap: 12px;
+      padding: 40px; color: var(--text-muted); font-size: 14px;
+    }
+
+    .stock-charts-grid {
+      display: flex; flex-direction: column; gap: 12px;
+    }
+
+    .stock-chart-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+    }
+
+    .stock-chart-title {
+      font-size: 13px; font-weight: 700; margin-bottom: 4px;
+    }
+
+    .stock-chart-sub {
+      font-size: 11px; color: var(--text-muted); margin-bottom: 14px;
+    }
+
+    .stock-chart-wrap { position: relative; height: 200px; }
+    .stock-chart-wrap.tall { height: 340px; }
+
+    /* ── Compare Table ── */
+    .compare-section {
+      margin-top: 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .compare-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+      padding: 0 8px;
+    }
+
+    .ctab {
+      padding: 12px 18px;
+      background: none; border: none; border-bottom: 2px solid transparent;
+      color: var(--text-muted); font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: all 0.15s; margin-bottom: -1px;
+    }
+
+    .ctab:hover { color: var(--text); }
+
+    .ctab.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+
+    .compare-body { overflow-x: auto; }
+
+    .compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+    .compare-table th {
+      background: rgba(79,127,255,0.09);
+      color: var(--accent); font-weight: 700;
+      padding: 12px 16px; text-align: center;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .compare-table th:first-child { text-align: left; padding-left: 20px; }
+
+    .compare-table td {
+      padding: 11px 16px; text-align: right;
+      border-bottom: 1px solid rgba(46,50,80,0.4);
+      color: var(--text-muted); white-space: nowrap;
+    }
+
+    .compare-table td:first-child {
+      text-align: left; padding-left: 20px;
+      color: var(--text); font-weight: 500;
+    }
+
+    .compare-table tbody tr:last-child td { border-bottom: none; }
+
+    .compare-table tbody tr:hover td { background: rgba(79,127,255,0.04); }
+
+    .chg-pos { color: var(--success) !important; font-weight: 600; }
+    .chg-neg { color: var(--danger)  !important; font-weight: 600; }
+
+    .year-label { color: var(--text-muted); font-size: 11px; margin-left: 4px; }
+
+    /* ── AI Card ── */
+    /* ── 토론방 섹션 ── */
+    .discuss-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 22px 24px;
+      margin-bottom: 14px;
+    }
+    .discuss-card-title { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .discuss-card-sub   { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+    .discuss-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: stretch; }
+    @media (max-width: 768px) { .discuss-inner { grid-template-columns: 1fr; } }
+
+    /* 워드클라우드: 우측 이슈 높이에 맞춰 자동 늘어남 */
+    .discuss-wc-col { display: flex; flex-direction: column; }
+    #discuss-wc-wrap {
+      background: #fff; border-radius: 10px; overflow: hidden;
+      flex: 1; min-height: 240px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #discuss-wc { width: 100%; height: 100%; display: block; }
+
+    /* 최근 이슈 */
+    .discuss-posts { display: flex; flex-direction: column; gap: 8px; }
+    .discuss-post {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 13px; cursor: pointer; transition: border-color .15s;
+      text-decoration: none; display: block;
+    }
+    .discuss-post:hover { border-color: var(--accent); }
+    .discuss-post-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .discuss-post-body  { font-size: 11px; color: var(--text-muted); line-height: 1.5;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .discuss-post-time  { font-size: 11px; color: #555; margin-top: 5px; }
+    .discuss-loading    { color: var(--text-muted); font-size: 13px; text-align: center; padding: 30px 0; }
+
+    .ai-card {
+      margin-top: 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .ai-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2), #a78bfa, #3dd68c);
+    }
+
+    .ai-card-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 18px 24px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .ai-header-left { display: flex; align-items: center; gap: 10px; flex: 1; }
+
+    .ai-icon { font-size: 22px; }
+
+    .ai-title { font-size: 15px; font-weight: 700; }
+
+    .ai-model-badge {
+      background: linear-gradient(135deg, rgba(79,127,255,0.15), rgba(124,92,252,0.15));
+      border: 1px solid rgba(124,92,252,0.3);
+      border-radius: 20px; padding: 2px 10px;
+      font-size: 11px; color: var(--accent2); font-weight: 600;
+    }
+
+    .ai-request-btn {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none; border-radius: 8px; padding: 8px 18px;
+      color: #fff; font-size: 13px; font-weight: 700;
+      cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    .ai-request-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+    .ai-request-btn:active { transform: translateY(0); }
+    .ai-request-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+    .ai-body { padding: 24px; min-height: 80px; }
+
+    .ai-placeholder {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 8px; padding: 24px; color: var(--text-muted); text-align: center;
+    }
+
+    .ai-placeholder p { font-size: 14px; }
+
+    .ai-loading {
+      display: flex; align-items: center; gap: 14px;
+      padding: 8px 0; color: var(--text-muted);
+    }
+
+    .ai-dots span {
+      display: inline-block; width: 7px; height: 7px;
+      background: var(--accent); border-radius: 50%;
+      animation: blink 1.2s infinite;
+      margin-right: 4px;
+    }
+
+    .ai-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .ai-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes blink {
+      0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+      40% { opacity: 1; transform: scale(1); }
+    }
+
+    /* AI Analysis content */
+    .ai-result {
+      line-height: 1.8; color: var(--text); font-size: 14.5px;
+      font-family: 'Pretendard', 'Noto Sans KR', -apple-system,
+        'Segoe UI', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+    }
+
+    .ai-result .ai-section {
+      margin-bottom: 24px;
+      padding: 18px 20px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    .ai-result .ai-section-title {
+      font-size: 15px; font-weight: 800; margin-bottom: 10px;
+      color: var(--text);
+    }
+
+    .ai-result .ai-section-body {
+      color: var(--text-muted); line-height: 1.9; font-size: 14px;
+    }
+
+    .ai-result .ai-section-body strong { color: var(--text); font-weight: 700; }
+
+    .ai-result .ai-section-body em { color: var(--accent); font-style: normal; }
+
+    .ai-result ol, .ai-result ul {
+      padding-left: 20px; margin-top: 6px;
+    }
+
+    .ai-result li { margin-bottom: 6px; color: var(--text-muted); }
+
+    .ai-result li strong { color: var(--text); }
+
+    .ai-error {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 16px;
+      background: rgba(248,113,113,0.08);
+      border: 1px solid rgba(248,113,113,0.2);
+      border-radius: 8px;
+      color: var(--danger); font-size: 13px;
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: var(--surface2); border: 1px solid var(--success);
+      border-radius: 8px; padding: 10px 20px;
+      font-size: 13px; color: var(--success); font-weight: 600;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      z-index: 999; white-space: nowrap;
+    }
+
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    mark { background: rgba(79,127,255,0.25); color: var(--accent); border-radius: 2px; padding: 0 1px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">D</div>
+  <span class="logo-text">기업 종합 시각화 분석</span>
+  <div class="header-badge" id="totalBadge">로딩 중...</div>
+</header>
+
+<!-- ────── Search View ────── -->
+<div id="searchView">
+  <div style="max-width:900px; margin:0 auto; padding:60px 24px 80px;">
+    <div class="hero">
+      <h2>상장사 기업 <em>종합 시각화 분석</em></h2>
+      <p>회사명, 영문명, 종목코드, corp_code로 검색 후 종합 시각화 분석을 확인하세요</p>
+      <div class="hint-chips">
+        <div class="hint-chip" onclick="setSearch('삼성전자')">삼성전자</div>
+        <div class="hint-chip" onclick="setSearch('SK하이닉스')">SK하이닉스</div>
+        <div class="hint-chip" onclick="setSearch('카카오')">카카오</div>
+        <div class="hint-chip" onclick="setSearch('네이버')">네이버</div>
+        <div class="hint-chip" onclick="setSearch('현대차')">현대차</div>
+        <div class="hint-chip" onclick="setSearch('LG전자')">LG전자</div>
+      </div>
+    </div>
+
+    <div class="search-box">
+      <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input id="searchInput" type="text"
+        placeholder="회사명, 영문명, 종목코드 또는 corp_code를 입력하세요"
+        autocomplete="off" spellcheck="false" />
+      <button class="clear-btn" id="clearBtn" onclick="clearSearch()">✕</button>
+    </div>
+
+    <div class="status-bar" id="statusBar"></div>
+    <div class="results-grid" id="resultsGrid"></div>
+  </div>
+</div>
+
+<!-- ────── Report View ────── -->
+<div id="reportView">
+  <div class="rv-wrap">
+    <div class="rv-top">
+      <button class="back-btn" onclick="backToSearch()">← 검색 결과</button>
+      <div class="rv-corp-info">
+        <div class="rv-corp-name" id="rv-corp-name"></div>
+        <div class="rv-corp-meta">
+          <span class="meta-tag">corp_code: <strong id="rv-corp-code"></strong></span>
+          <span class="meta-tag" id="rv-stock-wrap">종목코드: <strong id="rv-stock-code"></strong></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="rv-section-title">
+      📋 최근 3년 정기공시 보고서
+      <span>DART 공시 데이터 기준</span>
+    </div>
+
+    <div class="rv-report-list" id="rv-report-list">
+      <div class="rv-loading">
+        <div class="spinner" style="width:20px;height:20px;border-width:2px;"></div>
+        보고서 목록을 불러오는 중...
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ────── Analysis View ────── -->
+<div id="analysisView">
+  <div class="an-top">
+    <button class="back-btn" onclick="backToReportView()">← 보고서 목록</button>
+
+    <div class="an-corp-info">
+      <div class="an-corp-name" id="an-name"></div>
+      <div class="an-corp-meta">
+        <span class="meta-tag">corp_code: <strong id="an-code"></strong></span>
+        <span class="meta-tag" id="an-stock-wrap">종목코드: <strong id="an-stock"></strong></span>
+        
+      </div>
+    </div>
+
+    <div class="an-controls">
+      <select id="an-year" onchange="fetchAndRender()"></select>
+      <select id="an-reprt" onchange="fetchAndRender()">
+        <option value="11011">사업보고서</option>
+        <option value="11012">반기보고서</option>
+        <option value="11013">1분기보고서</option>
+        <option value="11014">3분기보고서</option>
+      </select>
+      <div class="fs-toggle">
+        <button class="fs-btn active" id="btn-cfs" onclick="switchFS('CFS')">연결</button>
+        <button class="fs-btn" id="btn-ofs" onclick="switchFS('OFS')">별도</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div class="an-state" id="an-loading" style="display:none;">
+    <div class="spinner"></div>
+    <p>재무 데이터를 불러오는 중...</p>
+  </div>
+
+  <!-- Error -->
+  <div class="an-state" id="an-error" style="display:none;">
+    <div class="err-icon">⚠️</div>
+    <p id="an-error-msg" style="font-size:15px; font-weight:600;"></p>
+    <p style="font-size:13px;">연도를 변경하거나 잠시 후 다시 시도해보세요</p>
+  </div>
+
+  <!-- Content -->
+  <div id="an-content" style="display:none;">
+    <div class="kpi-grid" id="kpi-grid"></div>
+    <!-- 주식 실시간 KPI (현재가·기간등락률·최고가·최저가·평균거래량·외국인보유율) -->
+    <div class="stock-kpi-grid" id="stock-kpi-grid" style="display:none;"></div>
+
+    <div class="chart-card charts-row1">
+      <div class="chart-title">매출 및 이익 추이 (우축: 이익률)</div>
+      <div class="chart-sub" id="sub-income"></div>
+      <div class="chart-outer">
+        <span class="y-lbl">억원</span>
+        <div class="chart-wrap"><canvas id="incomeChart"></canvas></div>
+        <span class="y-lbl">이익률 %</span>
+      </div>
+    </div>
+
+    <div class="charts-row2">
+      <div class="chart-card">
+        <div class="chart-title">재무구조 (부채 + 자본 = 자산)</div>
+        <div class="chart-sub" id="sub-balance"></div>
+        <div class="chart-outer">
+          <span class="y-lbl">억원</span>
+          <div class="chart-wrap sm"><canvas id="balanceChart"></canvas></div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">부채비율 추이</div>
+        <div class="chart-sub" id="sub-ratio"></div>
+        <div class="chart-outer">
+          <span class="y-lbl">부채비율 %</span>
+          <div class="chart-wrap sm"><canvas id="ratioChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Balance Sheet Box -->
+    <div class="bs-box-card" id="bs-box-card" style="display:none;">
+      <div class="bs-box-header">
+        <h3>📦 재무상태표 구조</h3>
+        <span id="bs-box-subtitle">자산 = 부채 + 자본</span>
+      </div>
+      <div id="bs-box-body">
+        <div style="color:var(--text-muted);font-size:13px;padding:20px 0;">데이터를 불러오는 중...</div>
+      </div>
+      <div class="bs-footer" id="bs-footer"></div>
+    </div>
+
+    <!-- Compare Tables -->
+    <div class="compare-section" id="compare-section" style="display:none;">
+      <div class="compare-tabs">
+        <button class="ctab active" data-tab="bs"    onclick="switchCTab('bs')">재무상태표</button>
+        <button class="ctab"        data-tab="is"    onclick="switchCTab('is')">손익계산서</button>
+        <button class="ctab"        data-tab="ratio" onclick="switchCTab('ratio')">재무비율</button>
+      </div>
+      <div class="compare-body" id="compare-body"></div>
+    </div>
+
+    <!-- Stock Charts Section -->
+    <div class="stock-section" id="stock-section">
+      <div class="stock-section-header">
+        <h3>📈 주식 차트</h3>
+        <span class="stock-code-badge" id="stock-code-badge"></span>
+        <span style="font-size:11px;color:var(--text-muted);">네이버 금융 · 일봉 데이터</span>
+      </div>
+      <div id="stock-charts-area">
+        <div class="stock-loading">
+          <div class="spinner" style="width:20px;height:20px;border-width:2px;"></div>
+          주식 데이터를 불러오는 중...
+        </div>
+      </div>
+    </div>
+
+    <!-- 토론방 분석 섹션 (상장 종목만 표시) -->
+    <div class="discuss-card" id="discuss-section" style="display:none;">
+      <div class="discuss-card-title">💬 토론방 분석</div>
+      <div class="discuss-card-sub" id="discuss-sub">핵심 키워드 워드클라우드 · 최근 이슈 토론 5개</div>
+      <div class="discuss-inner">
+        <div class="discuss-wc-col">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">핵심 키워드 워드클라우드 (최근 1개월)</div>
+          <div id="discuss-wc-wrap">
+            <canvas id="discuss-wc"></canvas>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">🆕 최근 이슈 네이버 종토방 (최근 5개)</div>
+          <div class="discuss-posts" id="discuss-posts">
+            <div class="discuss-loading">불러오는 중...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Analysis Card -->
+    <div class="ai-card">
+      <div class="ai-card-header">
+        <div class="ai-header-left">
+          <span class="ai-icon">🤖</span>
+          <span class="ai-title">AI 재무 분석</span>
+          <span class="ai-model-badge">Gemini 2.5 Flash</span>
+        </div>
+        <button class="ai-request-btn" id="ai-request-btn" onclick="requestAI()">
+          ✨ AI 분석 요청
+        </button>
+      </div>
+      <div class="ai-body" id="ai-body">
+        <div class="ai-placeholder">
+          <div style="font-size:36px;opacity:0.35;">🤖</div>
+          <p>재무 차트 분석 후 AI에게 쉬운 설명을 요청해보세요</p>
+          <p style="font-size:12px;">수익성, 성장성, 재무 건전성을 누구나 이해할 수 있게 설명해드려요</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ──── Global Chart Defaults ────
+Chart.defaults.color = '#8b8fa8';
+Chart.defaults.borderColor = 'rgba(46,50,80,0.6)';
+Chart.defaults.font.family = "'Pretendard','Noto Sans KR',-apple-system,sans-serif";
+
+// DataLabels 전역 1회 등록 + 기본값 off (필요한 차트에서만 on)
+Chart.register(ChartDataLabels);
+Chart.defaults.plugins.datalabels = { display: false };
+
+// ──── State ────
+let selectedCorp = null;
+let currentFSDiv = 'CFS';
+let financialData = null;
+let resultMap = {};
+let charts = {};
+let stockData = [];
+let discussionData = null;  // 토론방 API 응답 캐시
+let stockCharts = {};
+
+// ──── Init ────
+fetch('/api/stats').then(r => r.json()).then(d => {
+  document.getElementById('totalBadge').innerHTML =
+    `총 <span>${d.total.toLocaleString()}</span>개 기업`;
+});
+
+const yearSel = document.getElementById('an-year');
+const currentYear = new Date().getFullYear();
+for (let y = currentYear; y >= 2015; y--) {
+  const o = document.createElement('option');
+  o.value = y; o.textContent = `${y}년`;
+  if (y === currentYear) o.selected = true;
+  yearSel.appendChild(o);
+}
+
+// ──── Search ────
+const input = document.getElementById('searchInput');
+const clearBtn = document.getElementById('clearBtn');
+const statusBar = document.getElementById('statusBar');
+const resultsGrid = document.getElementById('resultsGrid');
+let debounce = null, lastQ = '';
+
+input.addEventListener('input', () => {
+  const q = input.value;
+  clearBtn.classList.toggle('visible', q.length > 0);
+  clearTimeout(debounce);
+  if (!q.trim()) { statusBar.innerHTML = ''; resultsGrid.innerHTML = ''; lastQ = ''; return; }
+  debounce = setTimeout(() => doSearch(q), 200);
+});
+
+input.addEventListener('keydown', e => { if (e.key === 'Escape') clearSearch(); });
+
+function setSearch(q) { input.value = q; clearBtn.classList.add('visible'); doSearch(q); input.focus(); }
+
+function clearSearch() {
+  input.value = ''; clearBtn.classList.remove('visible');
+  statusBar.innerHTML = ''; resultsGrid.innerHTML = ''; lastQ = ''; input.focus();
+}
+
+function doSearch(q) {
+  lastQ = q;
+  statusBar.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid #2e3250;border-top-color:#4f7fff;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px"></span>검색 중...';
+  fetch(`/api/search?q=${encodeURIComponent(q)}&limit=100`)
+    .then(r => r.json())
+    .then(data => { if (q !== lastQ) return; renderResults(data, q); })
+    .catch(() => { statusBar.textContent = '검색 오류'; });
+}
+
+function hl(text, q) {
+  if (!text || !q) return esc(text || '');
+  return esc(text).replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'), '<mark>$1</mark>');
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function renderResults({ total, results }, q) {
+  resultMap = {};
+  if (!results.length) {
+    statusBar.innerHTML = '';
+    resultsGrid.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><p><strong>"${esc(q)}"</strong> 검색 결과 없음</p></div>`;
+    return;
+  }
+  statusBar.innerHTML = `<span class="count">${total.toLocaleString()}개</span> 결과${total >= 100 ? ' (최대 100개)' : ''}`;
+  results.forEach((c, i) => { resultMap[i] = c; });
+
+  resultsGrid.innerHTML = results.map((c, i) => {
+    const stockHtml = c.stock_code && c.stock_code.trim()
+      ? `<span class="stock-badge">${hl(c.stock_code, q)}</span>`
+      : `<span class="no-stock">비상장</span>`;
+    return `
+      <div class="result-card">
+        <div class="card-main">
+          <div class="corp-name">${hl(c.corp_name, q)}</div>
+          <div class="corp-eng">${hl(c.corp_eng_name || '', q)}</div>
+        </div>
+        <div class="card-meta">
+          <span class="corp-code-badge" onclick="copyCode('${c.corp_code}',event)" title="클릭하여 복사">
+            ${hl(c.corp_code, q)}
+          </span>
+          ${stockHtml}
+          <button class="analyze-btn" onclick="openReportView(${i})">📋 공시 보고서</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function copyCode(code, e) {
+  e.stopPropagation();
+  navigator.clipboard.writeText(code).then(() => showToast(`"${code}" 복사됨`));
+}
+
+// ──── View helpers ────
+function showView(id) {
+  ['searchView', 'reportView', 'analysisView'].forEach(v => {
+    document.getElementById(v).style.display = v === id ? 'block' : 'none';
+  });
+  window.scrollTo(0, 0);
+}
+
+function backToSearch()     { showView('searchView'); }
+function backToReportView() { showView('reportView'); }
+
+// ──── Report View ────
+async function openReportView(idx) {
+  selectedCorp = resultMap[idx];
+  if (!selectedCorp) return;
+
+  document.getElementById('rv-corp-name').textContent = selectedCorp.corp_name;
+  document.getElementById('rv-corp-code').textContent = selectedCorp.corp_code;
+  const hasStock = !!(selectedCorp.stock_code && selectedCorp.stock_code.trim());
+  document.getElementById('rv-stock-wrap').style.display = hasStock ? '' : 'none';
+  if (hasStock) document.getElementById('rv-stock-code').textContent = selectedCorp.stock_code;
+
+  showView('reportView');
+
+  const listEl = document.getElementById('rv-report-list');
+  listEl.innerHTML = `<div class="rv-loading"><div class="spinner" style="width:20px;height:20px;border-width:2px;"></div>보고서 목록을 불러오는 중...</div>`;
+
+  try {
+    const resp = await fetch(`/api/reports?corp_code=${selectedCorp.corp_code}`);
+    const data = await resp.json();
+    renderReportList(data.list || []);
+  } catch(e) {
+    listEl.innerHTML = `<div class="rv-empty">⚠️ 보고서 목록을 불러오지 못했습니다.<br><small>${e.message}</small></div>`;
+  }
+}
+
+function renderReportList(list) {
+  const listEl = document.getElementById('rv-report-list');
+  if (!list.length) {
+    listEl.innerHTML = `<div class="rv-empty">📭 최근 3년간 정기공시 보고서가 없습니다.</div>`;
+    return;
+  }
+
+  const iconMap = {
+    '11011': '📄', '11012': '📑', '11013': '📝', '11014': '📝',
+  };
+
+  const fmtDate = (dt) =>
+    dt ? `${dt.substring(0,4)}.${dt.substring(4,6)}.${dt.substring(6,8)}` : '';
+
+  // 첫 번째 항목이 가장 최신 보고서
+  listEl.innerHTML = list.map((r, i) => {
+    const icon     = iconMap[r.reprt_code] || '📄';
+    const dateStr  = fmtDate(r.rcept_dt);
+    const dartUrl  = `https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${r.rcept_no}`;
+    const isLatest = i === 0;
+
+    // 보고서명에서 태그([기재정정] 등) 분리
+    const tagMatch = r.report_nm.match(/^\[([^\]]+)\]/);
+    const tag      = tagMatch ? `<span class="rv-report-tag">${tagMatch[1]}</span>` : '';
+    const baseName = r.report_nm.replace(/^\[[^\]]+\]\s*/, '');
+
+    return `
+      <div class="rv-report-card${isLatest ? ' rv-latest' : ''}">
+        <div class="rv-report-icon">${icon}</div>
+        <div class="rv-report-info">
+          <div class="rv-report-nm">${tag}${baseName}</div>
+          <div class="rv-report-date">접수일 ${dateStr} &nbsp;·&nbsp; ${r.bsns_year}년도</div>
+        </div>
+        <div class="rv-report-actions">
+          <button class="rv-btn-analyze"
+            onclick="openAnalysisFromReport(${r.bsns_year}, '${r.reprt_code}')">
+            📊 분석하기
+          </button>
+          <a class="rv-btn-doc" href="${dartUrl}" target="_blank" rel="noopener">
+            ↗ 원문
+          </a>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openAnalysisFromReport(bsns_year, reprt_code) {
+  if (!selectedCorp) return;
+
+  // analysis view 헤더 세팅
+  document.getElementById('an-name').textContent = selectedCorp.corp_name;
+  document.getElementById('an-code').textContent = selectedCorp.corp_code;
+  document.getElementById('an-stock').textContent = selectedCorp.stock_code || '-';
+  document.getElementById('an-stock-wrap').style.display =
+    selectedCorp.stock_code ? '' : 'none';
+
+  // 연도/보고서 종류 셀렉터 동기화
+  const yearSel = document.getElementById('an-year');
+  // 해당 연도가 없으면 옵션 추가
+  if (![...yearSel.options].some(o => parseInt(o.value) === bsns_year)) {
+    const o = document.createElement('option');
+    o.value = bsns_year; o.textContent = `${bsns_year}년`;
+    yearSel.insertBefore(o, yearSel.firstChild);
+  }
+  yearSel.value = bsns_year;
+  document.getElementById('an-reprt').value = reprt_code;
+
+  showView('analysisView');
+
+  // 주식 차트 로드
+  loadAndRenderStockCharts(selectedCorp.stock_code || null);
+  loadDiscussion(selectedCorp.stock_code || null);
+
+  fetchAndRender();
+}
+
+function switchFS(div) {
+  currentFSDiv = div;
+  document.getElementById('btn-cfs').classList.toggle('active', div === 'CFS');
+  document.getElementById('btn-ofs').classList.toggle('active', div === 'OFS');
+  if (financialData) renderAll();
+}
+
+async function fetchAndRender() {
+  if (!selectedCorp) return;
+  setState('loading');
+
+  const year  = parseInt(document.getElementById('an-year').value);
+  const reprt = document.getElementById('an-reprt').value;
+
+  try {
+    const res = await fetch(
+      `/api/financial?corp_code=${selectedCorp.corp_code}&bsns_year=${year}&reprt_code=${reprt}`
+    );
+    const data = await res.json();
+    if (data.status !== '000') throw new Error(data.message || '조회된 데이터가 없습니다');
+
+    let mainList = data.list;
+
+    // ── 반기/분기 보고서의 경우 bfefrmtrm(전전기)가 없으면 전년도 동기 보고서를 추가 조회해 3개년 구성
+    const hasThree = mainList.some(i =>
+      i.bfefrmtrm_amount && i.bfefrmtrm_amount.trim() !== '' && parseAmt(i.bfefrmtrm_amount) !== 0
+    );
+    if (!hasThree) {
+      try {
+        const prevRes  = await fetch(
+          `/api/financial?corp_code=${selectedCorp.corp_code}&bsns_year=${year - 1}&reprt_code=${reprt}`
+        );
+        const prevData = await prevRes.json();
+        if (prevData.status === '000' && prevData.list && prevData.list.length > 0) {
+          // 전년도 보고서의 frmtrm_amount(전기 = 2년 전 동기) → 현년도 bfefrmtrm_amount로 주입
+          const prevMap = {};
+          prevData.list.forEach(item => {
+            prevMap[`${item.fs_div}|${item.sj_div}|${item.account_nm}`] = item.frmtrm_amount || '';
+          });
+          mainList = mainList.map(item => {
+            const key = `${item.fs_div}|${item.sj_div}|${item.account_nm}`;
+            if (prevMap[key] !== undefined && (!item.bfefrmtrm_amount || item.bfefrmtrm_amount.trim() === '')) {
+              return { ...item, bfefrmtrm_amount: prevMap[key] };
+            }
+            return item;
+          });
+        }
+      } catch(e) {
+        console.warn('전전년도 동기 데이터 조회 실패 (2개년 표시):', e.message);
+      }
+    }
+
+    financialData = mainList;
+
+    const hasCFS = financialData.some(i => i.fs_div === 'CFS');
+    const hasOFS = financialData.some(i => i.fs_div === 'OFS');
+
+    document.getElementById('btn-cfs').disabled = !hasCFS;
+    document.getElementById('btn-ofs').disabled = !hasOFS;
+
+    if (currentFSDiv === 'CFS' && !hasCFS) {
+      currentFSDiv = 'OFS';
+      document.getElementById('btn-cfs').classList.remove('active');
+      document.getElementById('btn-ofs').classList.add('active');
+    }
+
+    
+
+    renderAll();
+    setState('content');
+  } catch (err) {
+    setState('error', err.message);
+  }
+}
+
+function setState(s, msg) {
+  document.getElementById('an-loading').style.display = s === 'loading' ? 'flex' : 'none';
+  document.getElementById('an-error').style.display  = s === 'error'   ? 'flex' : 'none';
+  document.getElementById('an-content').style.display = s === 'content' ? 'block' : 'none';
+  if (s === 'error' && msg) document.getElementById('an-error-msg').textContent = msg;
+}
+
+function renderAll() {
+  const year = parseInt(document.getElementById('an-year').value, 10);
+  const list = financialData.filter(i => i.fs_div === currentFSDiv);
+  if (!list.length) { setState('error', '해당 구분의 데이터가 없습니다'); return; }
+
+  const get = (sj, nm) => {
+    const item = list.find(i => i.sj_div === sj && i.account_nm === nm);
+    if (!item) return null;
+    return {
+      bf: parseAmt(item.bfefrmtrm_amount),
+      fm: parseAmt(item.frmtrm_amount),
+      th: parseAmt(item.thstrm_amount),
+    };
+  };
+
+  const revenue  = get('IS', '매출액');
+  const opProfit = get('IS', '영업이익');
+  let netIncome  = get('IS', '당기순이익(손실)');
+  if (!netIncome || netIncome.th === 0) netIncome = get('IS', '당기순이익');
+
+  const assets  = get('BS', '자산총계');
+  const liab    = get('BS', '부채총계');
+  const equity  = get('BS', '자본총계');
+
+  // Check if 3-year data exists (사업보고서)
+  const hasThree = list.some(i => i.bfefrmtrm_amount && i.bfefrmtrm_amount.trim() !== '' && parseAmt(i.bfefrmtrm_amount) !== 0);
+  const years = hasThree
+    ? [`${year-2}`, `${year-1}`, `${year}`]
+    : [`${year-1}`, `${year}`];
+
+  const toArr = d => {
+    if (!d) return null;
+    return hasThree ? [d.bf, d.fm, d.th] : [d.fm, d.th];
+  };
+
+  // KPI
+  const opPct   = revenue && opProfit && revenue.th > 0 ? opProfit.th / revenue.th * 100 : null;
+  const opPctPv = revenue && opProfit && revenue.fm > 0 ? opProfit.fm / revenue.fm * 100 : null;
+
+  document.getElementById('kpi-grid').innerHTML = [
+    kpiCard('매출액',    revenue?.th,  revenue?.fm),
+    kpiCard('영업이익',  opProfit?.th, opProfit?.fm),
+    kpiCard('영업이익률', opPct, opPctPv, true),
+    kpiCard('당기순이익', netIncome?.th, netIncome?.fm),
+  ].join('');
+
+  const fsNm    = list[0]?.fs_nm || '';
+  const reprt   = document.getElementById('an-reprt').value;
+  const trendLbl = reprt === '11011' ? '3개년 추이' : '동기간 3개년 추이';
+  const incArr  = [revenue?.th, opProfit?.th, netIncome?.th].filter(Boolean);
+  document.getElementById('sub-income').textContent  = `${fsNm} | 단위: ${unitLabel(incArr)} | ${trendLbl}`;
+  document.getElementById('sub-balance').textContent = `${fsNm} | 단위: 억원`;
+  document.getElementById('sub-ratio').textContent   = `${fsNm} | ${trendLbl}`;
+
+  renderIncomeChart(years, toArr(revenue), toArr(opProfit), toArr(netIncome));
+  renderBalanceChart(years, toArr(assets), toArr(liab), toArr(equity));
+  renderRatioChart(years, toArr(revenue), toArr(opProfit), toArr(netIncome), toArr(equity), toArr(liab));
+
+  // Balance sheet box
+  renderBSBox(list);
+
+  // Compare tables
+  renderCompareTables();
+
+  // Reset AI card when data changes
+  const aiBody = document.getElementById('ai-body');
+  const aiBtn  = document.getElementById('ai-request-btn');
+  if (aiBody) aiBody.innerHTML = `
+    <div class="ai-placeholder">
+      <div style="font-size:36px;opacity:0.35;">🤖</div>
+      <p>재무 차트 분석 후 AI에게 쉬운 설명을 요청해보세요</p>
+      <p style="font-size:12px;">수익성, 성장성, 재무 건전성을 누구나 이해할 수 있게 설명해드려요</p>
+    </div>`;
+  if (aiBtn) { aiBtn.disabled = false; aiBtn.textContent = '✨ AI 분석 요청'; }
+}
+
+// ──── KPI Card ────
+function kpiCard(label, val, prev, isPct = false) {
+  if (val == null) {
+    return `<div class="kpi-card"><div class="kpi-label">${label}</div><div class="kpi-val" style="color:var(--text-muted)">-</div></div>`;
+  }
+  const display = isPct ? val.toFixed(1) : fmtShort(val);
+  const unit    = isPct ? '%' : fmtUnit(val);
+  let chgHtml = '';
+  if (prev != null && prev !== 0) {
+    const chg = isPct ? val - prev : (val - prev) / Math.abs(prev) * 100;
+    const up  = chg >= 0;
+    chgHtml = `<div class="kpi-chg ${up ? 'up' : 'down'}">
+      ${up ? '▲' : '▼'} ${Math.abs(chg).toFixed(1)}${isPct ? '%p' : '%'} 전년비
+    </div>`;
+  }
+  return `<div class="kpi-card">
+    <div class="kpi-label">${label}</div>
+    <div class="kpi-val">${display}<span class="kpi-unit">${unit}</span></div>
+    ${chgHtml}
+  </div>`;
+}
+
+// ──── 주식 실시간 KPI 카드 (6개) ────
+function renderStockKPIs(data) {
+  const grid = document.getElementById('stock-kpi-grid');
+  if (!data || data.length === 0) { grid.style.display = 'none'; return; }
+
+  const latest  = data[data.length - 1];
+  const oldest  = data[0];
+  const cur     = latest.closePrice;
+  const first   = oldest.closePrice;
+  const chgRate = first > 0 ? ((cur - first) / first * 100) : 0;
+  const maxP    = Math.max(...data.map(d => d.highPrice));
+  const minP    = Math.min(...data.map(d => d.lowPrice));
+  const volumes = data.map(d => d.accumulatedTradingVolume).filter(v => v != null && v > 0);
+  const avgVol  = volumes.length ? Math.round(volumes.reduce((a, b) => a + b, 0) / volumes.length) : 0;
+  const frRate  = latest.foreignRetentionRate;
+
+  const isUp    = cur >= first;
+  const isChgUp = chgRate >= 0;
+
+  // 거래량 단위 변환
+  const fmtVol = v => v >= 1e8 ? (v/1e8).toFixed(1)+'억주' :
+                      v >= 1e4 ? (v/1e4).toFixed(1)+'만주' :
+                      v.toLocaleString()+'주';
+
+  const card = (label, mainVal, mainColor, sub = '') => `
+    <div class="stock-kpi-card">
+      <div class="stock-kpi-label">${label}</div>
+      <div class="stock-kpi-val" style="color:${mainColor}">${mainVal}</div>
+      ${sub ? `<div class="stock-kpi-sub">${sub}</div>` : ''}
+    </div>`;
+
+  const green = 'var(--success)';
+  const red   = 'var(--danger)';
+  const white = 'var(--text)';
+  const purple= '#a78bfa';
+
+  const dateRange = `${oldest.localDate} ~ ${latest.localDate}`;
+
+  grid.innerHTML = [
+    card('현재가',      cur.toLocaleString()+'원',            isUp ? green : red, `기준일 ${latest.localDate}`),
+    card('기간등락률',  (isChgUp?'+':'')+chgRate.toFixed(2)+'%', isChgUp ? green : red, dateRange),
+    card('기간 최고가', maxP.toLocaleString()+'원',           white),
+    card('기간 최저가', minP.toLocaleString()+'원',           white),
+    card('평균 거래량', fmtVol(avgVol),                       white, `${data.length}일 평균`),
+    card('외국인 보유율', frRate != null ? frRate+'%' : '-',  purple, `기준일 ${latest.localDate}`),
+  ].join('');
+
+  grid.style.display = 'grid';
+}
+
+// vtPlugin 제거 — Y축 레이블은 HTML .y-lbl 요소로 처리 (CSS writing-mode)
+
+// ──── Charts ────
+function baseOpts(yTitle, tooltipFmt) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { labels: { color: '#8b8fa8', usePointStyle: true, boxWidth: 10, font: { size: 12 } } },
+      tooltip: {
+        backgroundColor: '#1a1d27', borderColor: '#2e3250', borderWidth: 1,
+        titleColor: '#e8eaf6', bodyColor: '#8b8fa8', padding: 12,
+        callbacks: { label: tooltipFmt }
+      }
+    },
+    scales: {
+      x: { grid: { color: 'rgba(46,50,80,0.55)' }, ticks: { color: '#8b8fa8' } },
+      y: {
+        grid: { color: 'rgba(46,50,80,0.55)' }, ticks: { color: '#8b8fa8' }
+      }
+    }
+  };
+}
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function renderIncomeChart(years, revenue, opProfit, netIncome) {
+  destroyChart('income');
+  const ctx = document.getElementById('incomeChart').getContext('2d');
+  const all = [...(revenue||[]), ...(opProfit||[]), ...(netIncome||[])].filter(v => v != null);
+  const { div, unit } = getScale(all);
+  const sc = v => v != null ? +(v / div).toFixed(1) : null;
+
+  const pct = (a, b) => a && b
+    ? a.map((v, i) => (b[i] ? +(v / b[i] * 100).toFixed(2) : null))
+    : null;
+  const opMargins  = pct(opProfit,  revenue);
+  const netMargins = pct(netIncome, revenue);
+
+  // ① 막대 3개 먼저 (매출액 → 영업이익 → 당기순이익)
+  // ② 꺾은선 2개 나중에 (자동으로 위에 그려짐)
+  // 막대별 레이블 공통 설정 생성 (색상 + 배경박스로 겹침 방지)
+  const barLabel = (color, align) => ({
+    display: true,
+    anchor: (c) => (c.parsed?.y ?? 0) >= 0 ? 'end' : 'start',
+    align:  align,
+    color,
+    font: { size: 10, weight: '700' },
+    formatter: (v) => v != null ? v.toLocaleString() : null,
+    backgroundColor: 'rgba(15,17,32,0.75)',
+    borderRadius: 3,
+    padding: { top: 2, bottom: 2, left: 4, right: 4 },
+    clamp: true,
+  });
+
+  const datasets = [];
+  if (revenue)   datasets.push({
+    label: '매출액',   type: 'bar', data: revenue.map(sc),   yAxisID: 'y',
+    backgroundColor: 'rgba(79,127,255,0.72)', borderColor: '#4f7fff',
+    borderWidth: 1, borderRadius: 6,
+    datalabels: barLabel('#89b4fa', 'top'),
+  });
+  if (opProfit)  datasets.push({
+    label: '영업이익', type: 'bar', data: opProfit.map(sc),  yAxisID: 'y',
+    backgroundColor: 'rgba(61,214,140,0.72)', borderColor: '#3dd68c',
+    borderWidth: 1, borderRadius: 6,
+    datalabels: barLabel('#a6e3a1', 'right'),
+  });
+  if (netIncome) datasets.push({
+    label: '당기순이익', type: 'bar', data: netIncome.map(sc), yAxisID: 'y',
+    backgroundColor: 'rgba(251,146,60,0.72)', borderColor: '#fb923c',
+    borderWidth: 1, borderRadius: 6,
+    datalabels: barLabel('#fab387', 'left'),
+  });
+  if (opMargins)  datasets.push({
+    label: '영업이익률',   type: 'line', data: opMargins,  yAxisID: 'yPct',
+    borderColor: '#3dd68c', backgroundColor: 'transparent',
+    borderWidth: 2, tension: 0.3, pointRadius: 4, pointHoverRadius: 6,
+    borderDash: [5, 3],
+    datalabels: {
+      display: true,
+      anchor: (c) => (c.parsed?.y ?? 0) >= 0 ? 'end' : 'start',
+      align:  'top',
+      color: '#a6e3a1',
+      font: { size: 10, weight: '700' },
+      formatter: (v) => v != null ? v.toFixed(1) + '%' : null,
+      backgroundColor: 'rgba(15,17,32,0.75)',
+      borderRadius: 3,
+      padding: { top: 2, bottom: 2, left: 4, right: 4 },
+    },
+  });
+  if (netMargins) datasets.push({
+    label: '당기순이익률', type: 'line', data: netMargins, yAxisID: 'yPct',
+    borderColor: '#fb923c', backgroundColor: 'transparent',
+    borderWidth: 2, tension: 0.3, pointRadius: 4, pointHoverRadius: 6,
+    borderDash: [5, 3],
+    datalabels: {
+      display: true,
+      anchor: (c) => (c.parsed?.y ?? 0) >= 0 ? 'end' : 'start',
+      align:  'bottom',
+      color: '#fab387',
+      font: { size: 10, weight: '700' },
+      formatter: (v) => v != null ? v.toFixed(1) + '%' : null,
+      backgroundColor: 'rgba(15,17,32,0.75)',
+      borderRadius: 3,
+      padding: { top: 2, bottom: 2, left: 4, right: 4 },
+    },
+  });
+
+  charts.income = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: years, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      layout: { padding: { top: 28 } },
+      plugins: {
+        legend: { labels: { color: '#8b8fa8', usePointStyle: true, boxWidth: 10, font: { size: 12 } } },
+        tooltip: {
+          backgroundColor: '#1a1d27', borderColor: '#2e3250', borderWidth: 1,
+          titleColor: '#e8eaf6', bodyColor: '#8b8fa8', padding: 12,
+          callbacks: {
+            label: c => c.dataset.yAxisID === 'yPct'
+              ? ` ${c.dataset.label}: ${c.parsed.y?.toFixed(1)}%`
+              : ` ${c.dataset.label}: ${c.parsed.y?.toLocaleString()} ${unit}`
+          }
+        },
+        datalabels: { display: false },  // 차트 기본값 off, 데이터셋별로 on
+      },
+      scales: {
+        x: { grid: { color: 'rgba(46,50,80,0.55)' }, ticks: { color: '#8b8fa8' } },
+        y: {
+          grid: { color: 'rgba(46,50,80,0.55)' }, ticks: { color: '#8b8fa8' },
+          position: 'left',
+        },
+        yPct: {
+          grid: { drawOnChartArea: false },
+          ticks: { color: '#a0a3b8', callback: v => v + '%' },
+          position: 'right',
+        }
+      }
+    }
+  });
+}
+
+function renderBalanceChart(years, assets, liab, equity) {
+  destroyChart('balance');
+  if (!liab || !equity) return;
+  const ctx = document.getElementById('balanceChart').getContext('2d');
+  // 항상 억원 단위로 고정 (조원으로 자동 전환 방지)
+  const div = 1e8; const unit = '억원';
+  const sc = v => +(v / div).toFixed(1);
+
+  const opts = baseOpts(unit, ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toLocaleString()} ${unit}`);
+  opts.scales.y.stacked = true;
+  opts.layout = { padding: { top: 24 } };
+  opts.plugins.datalabels = {
+    display: true,
+    anchor: 'center', align: 'center',
+    color: '#fff',
+    font: { size: 11, weight: '700' },
+    formatter: (v) => v != null ? v.toLocaleString() : null,
+    clamp: true,
+    textShadowBlur: 4,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+  };
+
+  charts.balance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: years,
+      datasets: [
+        {
+          label: '부채총계', data: liab.map(sc), stack: 'A',
+          backgroundColor: 'rgba(248,113,113,0.8)', borderColor: '#f87171', borderWidth: 1, borderRadius: 4,
+        },
+        {
+          label: '자본총계', data: equity.map(sc), stack: 'A',
+          backgroundColor: 'rgba(61,214,140,0.8)', borderColor: '#3dd68c', borderWidth: 1, borderRadius: 4,
+        },
+      ]
+    },
+    options: opts
+  });
+}
+
+function renderRatioChart(years, revenue, opProfit, netIncome, equity, liab) {
+  destroyChart('ratio');
+  const ctx = document.getElementById('ratioChart').getContext('2d');
+
+  const pct = (a, b) => a && b ? a.map((v, i) => b[i] > 0 ? +(v / b[i] * 100).toFixed(2) : null) : null;
+  const debtRatios = pct(liab, equity);
+  if (!debtRatios) return;
+
+  charts.ratio = new Chart(ctx, {
+    type: 'line',
+    data: { labels: years, datasets: [{
+      label: '부채비율',
+      data: debtRatios,
+      borderColor: '#f87171',
+      backgroundColor: 'rgba(248,113,113,0.1)',
+      borderWidth: 2.5, tension: 0.3, fill: true, pointRadius: 5, pointHoverRadius: 7,
+    }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      layout: { padding: { top: 24, right: 10 } },
+      plugins: {
+        legend: { labels: { color: '#8b8fa8', usePointStyle: true, boxWidth: 10, font: { size: 12 } } },
+        tooltip: {
+          backgroundColor: '#1a1d27', borderColor: '#2e3250', borderWidth: 1,
+          titleColor: '#e8eaf6', bodyColor: '#8b8fa8', padding: 12,
+          callbacks: { label: c => ` 부채비율: ${c.parsed.y?.toFixed(1)}%` }
+        },
+        datalabels: {
+          display: true,
+          anchor: 'top', align: 'top',
+          color: '#f87171',
+          font: { size: 11, weight: '700' },
+          formatter: (v) => v != null ? v.toFixed(1) + '%' : null,
+          backgroundColor: 'rgba(15,17,32,0.7)',
+          borderRadius: 3,
+          padding: { top: 2, bottom: 2, left: 4, right: 4 },
+        }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(46,50,80,0.55)' }, ticks: { color: '#8b8fa8' } },
+        y: {
+          grid: { color: 'rgba(46,50,80,0.55)' },
+          ticks: { color: '#f87171', callback: v => v + '%' },
+        }
+      }
+    }
+  });
+}
+
+// ──── Utils ────
+function parseAmt(str) {
+  if (!str || !str.trim() || str.trim() === '-') return 0;
+  return parseFloat(str.replace(/,/g, '')) || 0;
+}
+
+function getScale(values) {
+  const max = Math.max(...values.filter(v => v != null).map(Math.abs));
+  if (max >= 1e12) return { div: 1e12, unit: '조원' };
+  if (max >= 1e8)  return { div: 1e8,  unit: '억원' };
+  if (max >= 1e4)  return { div: 1e4,  unit: '만원' };
+  return { div: 1, unit: '원' };
+}
+
+function unitLabel(values) { return getScale(values).unit; }
+
+function fmtShort(v) {
+  const a = Math.abs(v);
+  if (a >= 1e12) return (v / 1e12).toFixed(1);
+  if (a >= 1e8)  return Math.round(v / 1e8).toLocaleString();
+  if (a >= 1e4)  return Math.round(v / 1e4).toLocaleString();
+  return v.toLocaleString();
+}
+
+function fmtUnit(v) {
+  const a = Math.abs(v);
+  if (a >= 1e12) return '조원';
+  if (a >= 1e8)  return '억원';
+  if (a >= 1e4)  return '만원';
+  return '원';
+}
+
+// ──── Balance Sheet Box ────
+function renderBSBox(list) {
+  const card = document.getElementById('bs-box-card');
+  if (!card) return;
+
+  const getVal = (sj, nm) => {
+    const item = list.find(i => i.sj_div === sj && i.account_nm === nm);
+    return item ? parseAmt(item.thstrm_amount) : null;
+  };
+
+  const totalAssets  = getVal('BS', '자산총계');
+  const curAssets    = getVal('BS', '유동자산');
+  const ncurAssets   = getVal('BS', '비유동자산');
+  const curLiab      = getVal('BS', '유동부채');
+  const ncurLiab     = getVal('BS', '비유동부채');
+  const totalLiab    = getVal('BS', '부채총계');
+  const equity       = getVal('BS', '자본총계');
+
+  if (!totalAssets || totalAssets === 0) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  // #,###.#억원 형식 포맷 함수
+  const fmtBS = (v) => {
+    if (v == null) return '-';
+    const abs = Math.abs(v);
+    const fmt = (n) => n.toLocaleString('ko-KR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    if (abs >= 1e12) return fmt(v / 1e12) + '조원';
+    if (abs >= 1e8)  return fmt(v / 1e8)  + '억원';
+    if (abs >= 1e4)  return fmt(v / 1e4)  + '만원';
+    return v.toLocaleString('ko-KR') + '원';
+  };
+
+  // flex-grow 값으로 높이 비율 산정 (자산총계 기준 상대값)
+  const gv = (v) => v != null ? Math.max(v, 1) : null;
+
+  const ca  = gv(curAssets);
+  const nca = gv(ncurAssets != null ? ncurAssets : (totalAssets - (curAssets || 0)));
+  const cl  = gv(curLiab);
+  const ncl = gv(ncurLiab);
+  const tl  = gv(totalLiab);
+  const eq  = gv(equity);
+
+  function seg(cls, flexVal, name, rawVal) {
+    const pctStr = rawVal != null ? (rawVal / totalAssets * 100).toFixed(1) + '%' : '';
+    const valStr = fmtBS(rawVal);
+    return `<div class="bs-seg ${cls}" style="flex:${flexVal || 1} 0 0;" title="${name}: ${valStr} (${pctStr})">
+      <div class="bs-seg-inner">
+        <span class="bs-seg-name">${name}</span>
+        <span class="bs-seg-sep">·</span>
+        <span class="bs-seg-val">${valStr}</span>
+        <span class="bs-seg-sep">·</span>
+        <span class="bs-seg-pct">${pctStr}</span>
+      </div>
+    </div>`;
+  }
+
+  // 오른쪽 컬럼: 세분화 가능 여부 체크
+  const hasDetailLiab = cl != null && ncl != null;
+  const rightSegs = hasDetailLiab
+    ? seg('cur-liab', cl, '유동부채', curLiab) + seg('noncur-liab', ncl, '비유동부채', ncurLiab) + seg('equity', eq || 1, '자 본', equity)
+    : (tl ? seg('cur-liab', tl, '부채총계', totalLiab) + seg('equity', eq || 1, '자 본', equity)
+           : seg('equity', eq || 1, '자 본', equity));
+
+  document.getElementById('bs-box-body').innerHTML = `
+    <div class="bs-wrap">
+      <div class="bs-label-col">
+        <div class="bs-axis-label">자 산</div>
+      </div>
+      <div class="bs-col">
+        ${seg('cur-assets',    ca,  '유동자산',   curAssets)}
+        ${seg('noncur-assets', nca, '비유동자산', ncurAssets != null ? ncurAssets : (totalAssets - (curAssets||0)))}
+      </div>
+      <div style="width:6px;flex-shrink:0;"></div>
+      <div class="bs-col">
+        ${rightSegs}
+      </div>
+      <div class="bs-label-col">
+        <div class="bs-axis-label">부채+자본</div>
+      </div>
+    </div>`;
+
+  document.getElementById('bs-footer').innerHTML = [
+    ['cur-assets','#4f7fff','유동자산'],
+    ['noncur-assets','#7c5cfc','비유동자산'],
+    ['cur-liab','#f87171','유동부채'],
+    ['noncur-liab','#fb923c','비유동부채'],
+    ['equity','#3dd68c','자본총계'],
+  ].map(([,color,name]) =>
+    `<div class="bs-legend"><div class="bs-legend-dot" style="background:${color}"></div>${name}</div>`
+  ).join('');
+}
+
+// ──── Stock Charts ────
+function parseStockDate(str) {
+  return new Date(str.substring(0,4), parseInt(str.substring(4,6))-1, str.substring(6,8));
+}
+
+function makeHatch(lineColor, spacing = 8, lineWidth = 1.5) {
+  const c = document.createElement('canvas');
+  c.width = spacing; c.height = spacing;
+  const cx = c.getContext('2d');
+  cx.strokeStyle = lineColor;
+  cx.lineWidth = lineWidth;
+  cx.beginPath();
+  cx.moveTo(0, spacing);      cx.lineTo(spacing, 0);
+  cx.moveTo(-spacing/2, spacing/2); cx.lineTo(spacing/2, -spacing/2);
+  cx.moveTo(spacing/2, spacing*1.5); cx.lineTo(spacing*1.5, spacing/2);
+  cx.stroke();
+  return cx.createPattern(c, 'repeat');
+}
+
+function calcIchimoku(data) {
+  const n = data.length;
+  const tenkan = [], kijun = [], chikou = [];
+
+  // 전환선 (9일)
+  for (let i = 8; i < n; i++) {
+    const sl = data.slice(i-8, i+1);
+    tenkan.push({ x: parseStockDate(data[i].localDate),
+      y: (Math.max(...sl.map(d=>d.highPrice)) + Math.min(...sl.map(d=>d.lowPrice))) / 2 });
+  }
+  // 기준선 (26일)
+  for (let i = 25; i < n; i++) {
+    const sl = data.slice(i-25, i+1);
+    kijun.push({ x: parseStockDate(data[i].localDate),
+      y: (Math.max(...sl.map(d=>d.highPrice)) + Math.min(...sl.map(d=>d.lowPrice))) / 2 });
+  }
+  // 후행스팬
+  for (let i = 25; i < n; i++) {
+    chikou.push({ x: parseStockDate(data[i].localDate), y: data[i-25].closePrice });
+  }
+  // 선행스팬 A (기준선·전환선 평균, i=25부터)
+  const senkouA = [];
+  for (let i = 25; i < n; i++) {
+    const t = tenkan[i-8]?.y, k = kijun[i-25]?.y;
+    if (t != null && k != null)
+      senkouA.push({ x: parseStockDate(data[i].localDate), y: (t+k)/2 });
+  }
+  // 선행스팬 B (52일 최고·최저, i=51부터)
+  const senkouB = [];
+  for (let i = 51; i < n; i++) {
+    const sl = data.slice(i-51, i+1);
+    senkouB.push({ x: parseStockDate(data[i].localDate),
+      y: (Math.max(...sl.map(d=>d.highPrice)) + Math.min(...sl.map(d=>d.lowPrice))) / 2 });
+  }
+
+  // 날짜 정렬: senkouA[0]=data[25], senkouB[0]=data[51] → offset=26으로 맞춤
+  const offset = 51 - 25; // 26
+  const bullTop=[], bullBot=[], bearTop=[], bearBot=[];
+
+  for (let i = 0; i < senkouB.length; i++) {
+    const aVal = senkouA[i + offset]?.y;
+    const bVal = senkouB[i]?.y;
+    const dt   = senkouB[i].x;
+    if (aVal == null || bVal == null) continue;
+
+    const isBull = aVal >= bVal;
+    const top = isBull ? aVal : bVal;
+    const bot = isBull ? bVal : aVal;
+
+    if (isBull) {
+      bullTop.push({x:dt, y:top}); bullBot.push({x:dt, y:bot});
+      bearTop.push({x:dt, y:null}); bearBot.push({x:dt, y:null});
+    } else {
+      bearTop.push({x:dt, y:top}); bearBot.push({x:dt, y:bot});
+      bullTop.push({x:dt, y:null}); bullBot.push({x:dt, y:null});
+    }
+  }
+
+  return { tenkan, kijun, chikou, senkouA, senkouB, bullTop, bullBot, bearTop, bearBot };
+}
+
+function calcMA(data, period) {
+  return data.map((_, i) => {
+    if (i < period - 1) return null;
+    const sum = data.slice(i - period + 1, i + 1).reduce((a, d) => a + d.closePrice, 0);
+    return { x: parseStockDate(data[i].localDate), y: sum / period };
+  }).filter(Boolean);
+}
+
+function calcMACD(data, s=12, l=26, sig=9) {
+  function ema(vals, p) {
+    const r = []; const m = 2/(p+1);
+    let sum = 0;
+    for (let i=0;i<p&&i<vals.length;i++) sum+=vals[i];
+    r[p-1] = sum/p;
+    for (let i=p;i<vals.length;i++) r[i] = vals[i]*m + r[i-1]*(1-m);
+    return r;
+  }
+  const prices = data.map(d=>d.closePrice);
+  const e12=ema(prices,s), e26=ema(prices,l);
+  const macdLine=[];
+  for(let i=l-1;i<data.length;i++) {
+    if(e12[i]!==undefined && e26[i]!==undefined) macdLine.push(e12[i]-e26[i]);
+  }
+  const sigLine=ema(macdLine,sig);
+  const result={macd:[],signal:[],hist:[]};
+  for(let i=0;i<macdLine.length;i++){
+    const di=i+l-1;
+    if(di<data.length){
+      const dt=parseStockDate(data[di].localDate);
+      result.macd.push({x:dt,y:macdLine[i]});
+      if(sigLine[i]!==undefined){
+        result.signal.push({x:dt,y:sigLine[i]});
+        result.hist.push({x:dt,y:(macdLine[i]-(sigLine[i]||0))});
+      }
+    }
+  }
+  return result;
+}
+
+function calcRCI(data) {
+  const prices = data.map(d=>d.closePrice);
+  function rciAt(period, idx) {
+    if(idx < period-1) return null;
+    const slice = prices.slice(idx-period+1, idx+1);
+    const sorted = [...slice].sort((a,b)=>b-a);
+    let d2sum=0;
+    for(let i=0;i<period;i++){
+      const rank=sorted.indexOf(slice[i])+1;
+      const timeRank=period-i;
+      d2sum+=(rank-timeRank)**2;
+    }
+    return (1 - 6*d2sum / (period*(period**2-1)))*100;
+  }
+  const periods=[9,13,18,26];
+  const result={};
+  periods.forEach(p=>{ result['rci'+p]=[]; });
+  for(let i=0;i<data.length;i++){
+    const dt=parseStockDate(data[i].localDate);
+    periods.forEach(p=>{
+      const v=rciAt(p,i);
+      if(v!==null) result['rci'+p].push({x:dt,y:v});
+    });
+  }
+  return result;
+}
+
+// ──── 토론방 워드클라우드 + 최근 5개 이슈 ────
+async function loadDiscussion(stockCode) {
+  const section  = document.getElementById('discuss-section');
+  const postsEl  = document.getElementById('discuss-posts');
+  const subEl    = document.getElementById('discuss-sub');
+
+  if (!stockCode) { section.style.display = 'none'; discussionData = null; return; }
+
+  discussionData = null;  // 새 조회 전 초기화
+  section.style.display = 'block';
+  postsEl.innerHTML = '<div class="discuss-loading"><div class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px;"></div>토론방 데이터를 불러오는 중...</div>';
+
+  try {
+    const resp = await fetch(`/api/discussion?code=${stockCode}`);
+    const data = await resp.json();
+
+    if (!data.success) {
+      postsEl.innerHTML = '<div class="discuss-loading" style="color:#f87171;">토론방 데이터를 불러올 수 없습니다.</div>';
+      return;
+    }
+
+    discussionData = data;  // 전역 캐시 (AI 분석에 활용)
+
+    // ── 워드클라우드 ──
+    const keywords = data.keywords && data.keywords.length ? data.keywords : [['데이터없음', 1]];
+    const wcWrap   = document.getElementById('discuss-wc-wrap');
+    const wcCanvas = document.getElementById('discuss-wc');
+
+    const drawWC = () => {
+      // 레이아웃이 완성된 이후 실제 크기 측정
+      const w = wcWrap.offsetWidth  || 400;
+      const h = wcWrap.offsetHeight || 300;
+      wcCanvas.width  = w;
+      wcCanvas.height = h;
+      window.WordCloud(wcCanvas, {
+        list: keywords,
+        gridSize: Math.max(8, Math.round(14 * (w / 500))),
+        weightFactor: (size) => Math.max(12, size * 3.2),
+        fontFamily: 'Malgun Gothic, Noto Sans KR, sans-serif',
+        color: () => ['#7c3aed','#a78bfa','#818cf8','#6366f1','#c084fc'][Math.floor(Math.random()*5)],
+        backgroundColor: '#ffffff',
+        rotateRatio: 0,
+        ellipticity: 0.65,
+        drawOutOfBound: false,
+      });
+    };
+
+    // 이슈 목록이 먼저 렌더링된 후 높이를 측정하기 위해 약간 지연
+    if (window.WordCloud) setTimeout(drawWC, 80);
+    else setTimeout(drawWC, 600);
+
+    subEl.textContent = `핵심 키워드 워드클라우드 · 최근 이슈 토론 ${Math.min(5, (data.latestPosts||[]).length)}개`;
+
+    // ── 최근 5개 이슈 ──
+    const posts = Array.isArray(data.latestPosts) ? data.latestPosts.slice(0, 5) : [];
+    if (!posts.length) {
+      postsEl.innerHTML = '<div class="discuss-loading">최근 글이 없습니다.</div>';
+      return;
+    }
+    postsEl.innerHTML = posts.map(p => {
+      const dt = p.writtenAt ? new Date(p.writtenAt).toLocaleString('ko-KR', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+      const body = (p.content || '').replace(/<[^>]+>/g, '').trim();
+      return `<a class="discuss-post" href="${p.url}" target="_blank" rel="noopener">
+        <div class="discuss-post-title">${escHtml(p.title || '(제목 없음)')}</div>
+        ${body ? `<div class="discuss-post-body">${escHtml(body)}</div>` : ''}
+        ${dt ? `<div class="discuss-post-time">${dt}</div>` : ''}
+      </a>`;
+    }).join('');
+
+  } catch(e) {
+    postsEl.innerHTML = `<div class="discuss-loading" style="color:#f87171;">로드 실패: ${e.message}</div>`;
+  }
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function loadAndRenderStockCharts(stockCode) {
+  const section = document.getElementById('stock-section');
+  const area    = document.getElementById('stock-charts-area');
+  const badge   = document.getElementById('stock-code-badge');
+
+  if (!stockCode) {
+    section.style.display = 'none';
+    document.getElementById('stock-kpi-grid').style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'block';
+  badge.textContent = stockCode;
+
+  // Destroy existing stock charts
+  Object.values(stockCharts).forEach(c => { try { c.destroy(); } catch(e){} });
+  stockCharts = {};
+
+  area.innerHTML = `<div class="stock-loading"><div class="spinner" style="width:20px;height:20px;border-width:2px;"></div>주식 데이터를 불러오는 중...</div>`;
+
+  try {
+    const resp = await fetch(`/api/stock-chart?code=${stockCode}`);
+    const raw  = await resp.json();
+
+    // Normalize response
+    let infos = null;
+    if (Array.isArray(raw)) infos = raw;
+    else if (raw && Array.isArray(raw.priceInfos)) infos = raw.priceInfos;
+    else if (raw && raw.data && Array.isArray(raw.data.priceInfos)) infos = raw.data.priceInfos;
+
+    if (!infos || infos.length === 0) {
+      area.innerHTML = `<div style="color:var(--text-muted);padding:30px;font-size:13px;">주식 데이터를 가져올 수 없습니다. (비상장 종목이거나 API 오류)</div>`;
+      return;
+    }
+    stockData = infos;
+    renderStockKPIs(infos);
+    buildStockCharts();
+  } catch(e) {
+    area.innerHTML = `<div style="color:#f87171;padding:30px;font-size:13px;">주식 데이터 로드 실패: ${e.message}</div>`;
+  }
+}
+
+function buildStockCharts() {
+  const area = document.getElementById('stock-charts-area');
+  const last = stockData.length ? stockData.length - 1 : 0;
+  const recent = stockData.slice(-200); // 최근 200일
+
+  area.innerHTML = `
+    <div class="stock-charts-grid">
+      <div class="stock-chart-card">
+        <div class="stock-chart-title">가격 차트</div>
+        <div class="stock-chart-sub">종가 · 5일 · 20일 · 60일 이동평균 · 일목균형표 (구름대)</div>
+        <div class="chart-outer">
+          <span class="y-lbl">가격</span>
+          <div class="stock-chart-wrap tall"><canvas id="sc-price"></canvas></div>
+        </div>
+      </div>
+      <div class="stock-chart-card">
+        <div class="stock-chart-title">거래량 차트</div>
+        <div class="stock-chart-sub">일별 거래량 (상승: 녹색 / 하락: 적색)</div>
+        <div class="chart-outer">
+          <span class="y-lbl">거래량 주</span>
+          <div class="stock-chart-wrap"><canvas id="sc-volume"></canvas></div>
+        </div>
+      </div>
+      <div class="stock-chart-card">
+        <div class="stock-chart-title">MACD 차트</div>
+        <div class="stock-chart-sub">단기(12) · 장기(26) · 시그널(9)</div>
+        <div class="chart-outer">
+          <span class="y-lbl">MACD값</span>
+          <div class="stock-chart-wrap"><canvas id="sc-macd"></canvas></div>
+        </div>
+      </div>
+      <div class="stock-chart-card">
+        <div class="stock-chart-title">RCI 차트</div>
+        <div class="stock-chart-sub">순위 상관 지수 — RCI 9/13/18/26</div>
+        <div class="chart-outer">
+          <span class="y-lbl">RCI %</span>
+          <div class="stock-chart-wrap"><canvas id="sc-rci"></canvas></div>
+        </div>
+      </div>
+      <div class="stock-chart-card">
+        <div class="stock-chart-title">외국인 보유율</div>
+        <div class="stock-chart-sub">외국인 투자자 보유 비율 (%)</div>
+        <div class="chart-outer">
+          <span class="y-lbl">보유율 %</span>
+          <div class="stock-chart-wrap"><canvas id="sc-foreign"></canvas></div>
+        </div>
+      </div>
+    </div>`;
+
+  const scaleX = {
+    type:'time', time:{ displayFormats:{day:'MM/dd',week:'MM/dd',month:'yy/MM'} },
+    grid:{ color:'rgba(100,100,130,0.15)' },
+    ticks:{ color:'#8b8fa8', maxTicksLimit:10 }
+  };
+  const baseOpts = (yLabel, yFmt) => ({
+    responsive:true, maintainAspectRatio:false,
+    interaction:{ intersect:false, mode:'index' },
+    scales:{
+      x: scaleX,
+      y:{ grid:{color:'rgba(100,100,130,0.15)'}, ticks:{color:'#8b8fa8', callback:yFmt} }
+    },
+    plugins:{ legend:{display:true,labels:{color:'#8b8fa8',boxWidth:12,font:{size:11}}},
+              tooltip:{backgroundColor:'rgba(20,22,40,0.9)',titleColor:'#cdd6f4',bodyColor:'#a6adc8'} }
+  });
+
+  // ── 가격 차트 (이평선 + 일목균형표)
+  const ma5  = calcMA(recent, 5);
+  const ma20 = calcMA(recent, 20);
+  const ma60 = calcMA(recent, 60);
+  const ichi = calcIchimoku(recent);
+  const highLine = recent.map(d=>({x:parseStockDate(d.localDate),y:d.highPrice}));
+  const lowLine  = recent.map(d=>({x:parseStockDate(d.localDate),y:d.lowPrice}));
+
+  stockCharts.price = new Chart(document.getElementById('sc-price').getContext('2d'), {
+    type:'line',
+    data:{
+      datasets:[
+        // ── 구름대 (상승=초록 빗금, 하락=빨강 빗금)
+        { label:'상승구름 상단', data:ichi.bullTop,
+          borderColor:'rgba(166,227,161,0.45)', backgroundColor:makeHatch('rgba(166,227,161,0.55)'),
+          borderWidth:1, pointRadius:0, tension:0, fill:'+1', order:12, spanGaps:false },
+        { label:'상승구름 하단', data:ichi.bullBot,
+          borderColor:'rgba(166,227,161,0.45)', backgroundColor:'transparent',
+          borderWidth:1, pointRadius:0, tension:0, fill:false, order:11, spanGaps:false },
+        { label:'하락구름 상단', data:ichi.bearTop,
+          borderColor:'rgba(243,139,168,0.45)', backgroundColor:makeHatch('rgba(243,139,168,0.55)'),
+          borderWidth:1, pointRadius:0, tension:0, fill:'+1', order:10, spanGaps:false },
+        { label:'하락구름 하단', data:ichi.bearBot,
+          borderColor:'rgba(243,139,168,0.45)', backgroundColor:'transparent',
+          borderWidth:1, pointRadius:0, tension:0, fill:false, order:9, spanGaps:false },
+        // ── 고가 / 저가
+        { label:'고가', data:highLine,
+          borderColor:'rgba(180,180,200,0.3)', borderWidth:0.8,
+          pointRadius:0, tension:0.1, fill:false, borderDash:[2,3], order:8 },
+        { label:'저가', data:lowLine,
+          borderColor:'rgba(180,180,200,0.3)', borderWidth:0.8,
+          pointRadius:0, tension:0.1, fill:false, borderDash:[2,3], order:7 },
+        // ── 이동평균선
+        { label:'MA5',  data:ma5,  borderColor:'#f9e2af', borderWidth:1.2, pointRadius:0, tension:0.2, fill:false, order:6 },
+        { label:'MA20', data:ma20, borderColor:'#cba6f7', borderWidth:1.2, pointRadius:0, tension:0.2, fill:false, order:5 },
+        { label:'MA60', data:ma60, borderColor:'#f38ba8', borderWidth:1.2, pointRadius:0, tension:0.2, fill:false, order:4 },
+        // ── 일목균형표
+        { label:'전환선(9)', data:ichi.tenkan,
+          borderColor:'#89b4fa', borderWidth:1.5, pointRadius:0, tension:0.1, fill:false, order:3 },
+        { label:'기준선(26)', data:ichi.kijun,
+          borderColor:'#f38ba8', borderWidth:1.5, pointRadius:0, tension:0.1, fill:false, order:2 },
+        { label:'후행스팬', data:ichi.chikou,
+          borderColor:'rgba(166,227,161,0.7)', borderWidth:1.2, pointRadius:0, tension:0.1,
+          fill:false, borderDash:[4,3], order:1 },
+        // ── 종가 (최상단)
+        { label:'종가', data:recent.map(d=>({x:parseStockDate(d.localDate),y:d.closePrice})),
+          borderColor:'#cdd6f4', borderWidth:2,
+          pointRadius:3, pointHoverRadius:5,
+          pointBackgroundColor:'#cdd6f4', pointBorderColor:'#1e2030', pointBorderWidth:1.5,
+          tension:0.2, fill:false, order:0 },
+      ]
+    },
+    options:{
+      ...baseOpts('가격 (원)', v=>v.toLocaleString()+'원'),
+      plugins:{
+        legend:{ display:true, labels:{ color:'#8b8fa8', boxWidth:12, font:{size:10},
+          filter: item => !['고가','저가','상승구름 하단','하락구름 상단','하락구름 하단'].includes(item.text) } },
+        tooltip:{ backgroundColor:'rgba(20,22,40,0.9)', titleColor:'#cdd6f4', bodyColor:'#a6adc8' }
+      }
+    }
+  });
+
+  // ── 거래량 차트
+  stockCharts.volume = new Chart(document.getElementById('sc-volume').getContext('2d'), {
+    type:'bar',
+    data:{
+      datasets:[{
+        label:'거래량',
+        data: recent.map(d=>({x:parseStockDate(d.localDate),y:d.accumulatedTradingVolume})),
+        backgroundColor: recent.map((d,i)=>{
+          if(i===0) return '#89b4fa';
+          return recent[i-1] && d.closePrice >= recent[i-1].closePrice ? '#a6e3a1' : '#f38ba8';
+        }),
+        borderWidth:0
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ intersect:false, mode:'index' },
+      scales:{
+        x: scaleX,
+        y:{ grid:{color:'rgba(100,100,130,0.15)'},
+            ticks:{color:'#8b8fa8', callback:v=>v>=1e6?(v/1e6).toFixed(1)+'M':v.toLocaleString()},
+            title:{display:true,text:'',color:'#8b8fa8'} }
+      },
+      plugins:{ legend:{display:false},
+                tooltip:{backgroundColor:'rgba(20,22,40,0.9)',titleColor:'#cdd6f4',bodyColor:'#a6adc8'} }
+    }
+  });
+
+  // ── MACD 차트
+  const macdResult = calcMACD(recent);
+  stockCharts.macd = new Chart(document.getElementById('sc-macd').getContext('2d'), {
+    type:'bar',
+    data:{
+      datasets:[
+        { type:'line', label:'MACD',   data:macdResult.macd,   borderColor:'#89b4fa', borderWidth:1.5, pointRadius:0, tension:0.2, order:1 },
+        { type:'line', label:'Signal', data:macdResult.signal, borderColor:'#f9e2af', borderWidth:1.5, pointRadius:0, tension:0.2, order:2 },
+        { type:'bar',  label:'Hist',   data:macdResult.hist,
+          backgroundColor:macdResult.hist.map(d=>d.y>=0?'rgba(166,227,161,0.7)':'rgba(243,139,168,0.7)'),
+          borderWidth:0, order:3 },
+      ]
+    },
+    options:{ ...baseOpts('MACD 값', v=>v.toFixed(2)) }
+  });
+
+  // ── RCI 차트
+  const rciResult = calcRCI(recent);
+  const rciColors = { rci9:'#f38ba8', rci13:'#fab387', rci18:'#a6e3a1', rci26:'#89b4fa' };
+  stockCharts.rci = new Chart(document.getElementById('sc-rci').getContext('2d'), {
+    type:'line',
+    data:{
+      datasets: Object.entries(rciResult).map(([k,v])=>({
+        label:k.toUpperCase(), data:v,
+        borderColor:rciColors[k], borderWidth:1.2, pointRadius:0, tension:0.2
+      }))
+    },
+    options:{
+      ...baseOpts('RCI (%)', v=>v.toFixed(0)+'%'),
+      scales:{
+        x:scaleX,
+        y:{ min:-100, max:100, grid:{color:'rgba(100,100,130,0.15)'},
+            ticks:{color:'#8b8fa8', callback:v=>v+'%'},
+            title:{display:true,text:'',color:'#8b8fa8'} }
+      }
+    }
+  });
+
+  // ── 외국인 보유율 차트
+  const foreignData = recent
+    .filter(d => d.foreignRetentionRate != null)
+    .map(d => ({x:parseStockDate(d.localDate), y:d.foreignRetentionRate}));
+  stockCharts.foreign = new Chart(document.getElementById('sc-foreign').getContext('2d'), {
+    type:'line',
+    data:{ datasets:[{
+      label:'외국인 보유율',
+      data:foreignData,
+      borderColor:'#cba6f7', backgroundColor:'rgba(203,166,247,0.08)',
+      borderWidth:1.5, pointRadius:0, tension:0.2, fill:true
+    }] },
+    options:{ ...baseOpts('보유율 %', v=>v.toFixed(2)+'%') }
+  });
+}
+
+// ──── Compare Tables ────
+let compareData = null;
+
+function renderCompareTables() {
+  const list = financialData.filter(i => i.fs_div === currentFSDiv);
+  if (!list.length) return;
+
+  const get = (sj, nm) => list.find(i => i.sj_div === sj && i.account_nm === nm);
+
+  const sample = list[0];
+  const thYear = (sample?.thstrm_dt || '').match(/(\d{4})/)?.[1] || '-';
+  const fmYear = (sample?.frmtrm_dt || '').match(/(\d{4})/)?.[1] || '-';
+
+  const toItem = (label, sj, nm) => {
+    const d = get(sj, nm);
+    return { label, th: d ? parseAmt(d.thstrm_amount) : null, fm: d ? parseAmt(d.frmtrm_amount) : null };
+  };
+
+  const bsItems = [
+    toItem('자산총계',   'BS', '자산총계'),
+    toItem('부채총계',   'BS', '부채총계'),
+    toItem('자본총계',   'BS', '자본총계'),
+    toItem('유동자산',   'BS', '유동자산'),
+    toItem('비유동자산', 'BS', '비유동자산'),
+    toItem('유동부채',   'BS', '유동부채'),
+    toItem('비유동부채', 'BS', '비유동부채'),
+  ];
+
+  const netNm  = get('IS', '당기순이익(손실)') ? '당기순이익(손실)' : '당기순이익';
+  const pretaxNm = get('IS', '법인세차감전 순이익') ? '법인세차감전 순이익'
+                  : get('IS', '법인세비용차감전순이익') ? '법인세비용차감전순이익' : null;
+
+  const isItems = [
+    toItem('매출액',             'IS', '매출액'),
+    toItem('영업이익',           'IS', '영업이익'),
+    pretaxNm ? toItem('법인세차감전순이익', 'IS', pretaxNm) : null,
+    toItem('당기순이익',         'IS', netNm),
+  ].filter(Boolean);
+
+  // calc helpers
+  const amtOf = (sj, nm, key) => { const d = get(sj, nm); return d ? parseAmt(d[key]) : 0; };
+  const ratio = (a, b) => b !== 0 ? a / b * 100 : null;
+
+  const mkRatio = (label, thVal, fmVal) => ({ label, th: thVal, fm: fmVal, isPct: true });
+
+  const curA_th = amtOf('BS','유동자산','thstrm_amount'),   curA_fm = amtOf('BS','유동자산','frmtrm_amount');
+  const curL_th = amtOf('BS','유동부채','thstrm_amount'),   curL_fm = amtOf('BS','유동부채','frmtrm_amount');
+  const ast_th  = amtOf('BS','자산총계','thstrm_amount'),   ast_fm  = amtOf('BS','자산총계','frmtrm_amount');
+  const liab_th = amtOf('BS','부채총계','thstrm_amount'),   liab_fm = amtOf('BS','부채총계','frmtrm_amount');
+  const eq_th   = amtOf('BS','자본총계','thstrm_amount'),   eq_fm   = amtOf('BS','자본총계','frmtrm_amount');
+  const rev_th  = amtOf('IS','매출액',  'thstrm_amount'),   rev_fm  = amtOf('IS','매출액',  'frmtrm_amount');
+  const op_th   = amtOf('IS','영업이익','thstrm_amount'),   op_fm   = amtOf('IS','영업이익','frmtrm_amount');
+  const net_th  = amtOf('IS', netNm,   'thstrm_amount'),   net_fm  = amtOf('IS', netNm,   'frmtrm_amount');
+
+  const ratioItems = [
+    mkRatio('유동비율 (%)',          ratio(curA_th, curL_th),  ratio(curA_fm, curL_fm)),
+    mkRatio('부채비율 (%)',          ratio(liab_th, eq_th),    ratio(liab_fm, eq_fm)),
+    mkRatio('자기자본비율 (%)',      ratio(eq_th, ast_th),     ratio(eq_fm, ast_fm)),
+    mkRatio('매출액영업이익률 (%)',  ratio(op_th,  rev_th),    ratio(op_fm,  rev_fm)),
+    mkRatio('매출액순이익률 (%)',    ratio(net_th, rev_th),    ratio(net_fm, rev_fm)),
+    mkRatio('ROE (%)',               ratio(net_th, eq_th),     ratio(net_fm, eq_fm)),
+    mkRatio('ROA (%)',               ratio(net_th, ast_th),    ratio(net_fm, ast_fm)),
+  ];
+
+  compareData = { bsItems, isItems, ratioItems, thYear, fmYear };
+
+  // show section, reset to first tab
+  document.getElementById('compare-section').style.display = '';
+  document.querySelectorAll('.ctab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'bs'));
+  renderCTabContent('bs');
+}
+
+function switchCTab(tab) {
+  document.querySelectorAll('.ctab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  renderCTabContent(tab);
+}
+
+function fmtCell(v) {
+  if (v === null || v === undefined) return '-';
+  const abs = Math.abs(v);
+  if (abs >= 1e12) return `${(v / 1e12).toFixed(1)}조원`;
+  if (abs >= 1e8)  return `${(v / 1e8).toFixed(1)}억원`;
+  if (abs >= 1e4)  return `${Math.round(v / 1e4).toLocaleString()}만원`;
+  return `${v.toLocaleString()}원`;
+}
+
+function fmtChgAmt(v) {
+  if (v === null || v === undefined) return '-';
+  const sign = v > 0 ? '+' : '';
+  return sign + fmtCell(v);
+}
+
+function renderCTabContent(tab) {
+  if (!compareData) return;
+  const { thYear, fmYear } = compareData;
+
+  let items;
+  if      (tab === 'bs')    items = compareData.bsItems;
+  else if (tab === 'is')    items = compareData.isItems;
+  else                      items = compareData.ratioItems;
+
+  const isPctTab = (tab === 'ratio');
+
+  const rows = items.map(({ label, th, fm, isPct }) => {
+    const isP = isPct || isPctTab;
+    const chg = (th != null && fm != null) ? th - fm : null;
+    const chgRate = (!isP && fm && Math.abs(fm) > 0) ? (th - fm) / Math.abs(fm) * 100 : null;
+
+    const fmtVal = v => {
+      if (v === null || v === undefined) return '-';
+      return isP ? `${v.toFixed(2)}%` : fmtCell(v);
+    };
+    const fmtChg = v => {
+      if (v === null || v === undefined) return '-';
+      const sign = v >= 0 ? '+' : '';
+      return isP ? `${sign}${v.toFixed(2)}%p` : fmtChgAmt(v);
+    };
+    const fmtRate = v => v === null ? '' : `<td class="${v >= 0 ? 'chg-pos' : 'chg-neg'}">${v >= 0 ? '+' : ''}${v.toFixed(2)}%</td>`;
+
+    const chgCls = chg === null ? '' : chg > 0 ? 'chg-pos' : chg < 0 ? 'chg-neg' : '';
+
+    return `<tr>
+      <td>${label}</td>
+      <td>${fmtVal(th)}<span class="year-label">(${thYear}년)</span></td>
+      <td>${fmtVal(fm)}<span class="year-label">(${fmYear}년)</span></td>
+      <td class="${chgCls}">${fmtChg(chg)}</td>
+      ${isP ? '' : fmtRate(chgRate)}
+    </tr>`;
+  }).join('');
+
+  const rateHeader = isPctTab ? '' : '<th>증감율</th>';
+
+  document.getElementById('compare-body').innerHTML = `
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th>항목</th>
+          <th>당기 (${thYear}년)</th>
+          <th>전기 (${fmYear}년)</th>
+          <th>${isPctTab ? '증감(%p)' : '증감'}</th>
+          ${rateHeader}
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ──── AI Analysis ────
+async function requestAI() {
+  if (!selectedCorp || !financialData) return;
+
+  const btn = document.getElementById('ai-request-btn');
+  const body = document.getElementById('ai-body');
+
+  btn.disabled = true;
+  btn.textContent = '분석 중...';
+
+  body.innerHTML = `
+    <div class="ai-loading">
+      <div class="spinner" style="width:24px;height:24px;border-width:2px;"></div>
+      <div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px;">Gemini가 재무 데이터를 분석하고 있습니다</div>
+        <div style="font-size:12px;color:var(--text-muted);">잠시만 기다려 주세요 (10~20초 소요)</div>
+      </div>
+      <div class="ai-dots" style="margin-left:auto;">
+        <span></span><span></span><span></span>
+      </div>
+    </div>`;
+
+  try {
+    const year  = document.getElementById('an-year').value;
+    const res   = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        corpName: selectedCorp.corp_name,
+        year,
+        fsDiv: currentFSDiv,
+        list: financialData,
+        discussionData: discussionData || null,
+      }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    // 실제 사용된 모델 배지 업데이트
+    if (data.model) {
+      const badge = document.querySelector('.ai-model-badge');
+      if (badge) badge.textContent = data.model;
+    }
+
+    body.innerHTML = `<div class="ai-result">${renderMD(data.analysis)}</div>`;
+  } catch (err) {
+    body.innerHTML = `<div class="ai-error">⚠️ ${esc(err.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✨ 다시 분석';
+  }
+}
+
+function renderMD(text) {
+  const e = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  function parseBody(raw) {
+    return e(raw)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+      .replace(/^---+$/gm, '<hr style="border-color:var(--border);margin:10px 0;">')
+      .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+      .replace(/^[-•] (.+)$/gm, '<li>$1</li>')
+      .replace(/(<li>[\s\S]*?<\/li>(\n|$))+/g, m => `<ul style="padding-left:18px;margin:6px 0;">${m}</ul>`)
+      .replace(/\n{2,}/g, '</p><p>')
+      .replace(/\n/g, '<br>');
+  }
+
+  // Split on lines that start with ## (section headers)
+  const parts = text.split(/\n(?=## )/);
+
+  // If no sections found, render as plain text
+  if (parts.length <= 1 && !text.includes('## ')) {
+    return `<div class="ai-section"><div class="ai-section-body"><p>${parseBody(text)}</p></div></div>`;
+  }
+
+  return parts.map(part => {
+    const match = part.match(/^## (.+)\n?([\s\S]*)/);
+    if (match) {
+      const title = e(match[1].trim());
+      const body  = match[2] ? parseBody(match[2].trim()) : '';
+      return `<div class="ai-section">
+        <div class="ai-section-title">${title}</div>
+        <div class="ai-section-body"><p>${body}</p></div>
+      </div>`;
+    }
+    // intro text before first section
+    const intro = part.trim();
+    if (!intro) return '';
+    return `<div class="ai-section" style="background:transparent;border:none;padding:0 0 8px;">
+      <div class="ai-section-body" style="color:var(--text-muted);font-size:13px;"><p>${parseBody(intro)}</p></div>
+    </div>`;
+  }).join('');
+}
+
+// ──── Toast ────
+const toast = document.getElementById('toast');
+let toastT;
+function showToast(msg) {
+  toast.textContent = msg; toast.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => toast.classList.remove('show'), 2000);
+}
+</script>
+<!-- ── Footer ── -->
+<footer style="
+  margin-top: 48px;
+  padding: 20px 24px;
+  background: #1a1d27;
+  border-top: 1px solid #2e3250;
+  text-align: center;
+  font-size: 13px;
+  color: #8b8fa8;
+  letter-spacing: 0.3px;
+">
+  © 2026 상장사 기업 종합 시각화 도구 &nbsp;|&nbsp; Make by Bjkim
+</footer>
+</body>
+</html>
