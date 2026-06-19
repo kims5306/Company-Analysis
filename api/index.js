@@ -228,7 +228,9 @@ async function fetchFinancialMerged(baseParams) {
   const tryAll = async (fs_div) => {
     try {
       const d = await fetchDartAPI({ ...baseParams, fs_div }, 'fnlttSinglAcntAll');
-      return (d && d.status === '000' && Array.isArray(d.list)) ? d.list : [];
+      if (!d || d.status !== '000' || !Array.isArray(d.list)) return [];
+      // 🔴 fnlttSinglAcntAll 응답엔 fs_div 필드가 없음 → 요청한 구분을 직접 주입(프론트가 CFS/OFS 필터에 사용)
+      return d.list.map(it => ({ ...it, fs_div: it.fs_div || fs_div }));
     } catch (e) { return []; }
   };
   let list = [...(await tryAll('CFS')), ...(await tryAll('OFS'))];
