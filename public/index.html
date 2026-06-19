@@ -1382,12 +1382,35 @@ async function fetchAndRender() {
   const reprt = document.getElementById('an-reprt').value;
 
   try {
-    const res = await fetch(
+    let res = await fetch(
       `/api/financial?corp_code=${selectedCorp.corp_code}&bsns_year=${year}&reprt_code=${reprt}`
     );
-    const data = await res.json();
+    let data = await res.json();
+
+    // ── 선택한 보고서가 아직 미공시(예: 2분기보고서 나오기 전 3분기 선택)면
+    //    같은 연도에서 실제 존재하는 보고서로 자동 폴백.
+    //    최신 공시 순서(3분기 11014 → 반기 11012 → 1분기 11013 → 사업 11011)로
+    //    선택값보다 한 단계씩 과거로 내려가며 데이터 있는 걸 찾는다.
+    if (data.status !== '000') {
+      const REPRT_RECENT = ['11014', '11012', '11013', '11011']; // 최신→과거
+      const startIdx = REPRT_RECENT.indexOf(reprt);
+      const fallbackOrder = startIdx >= 0 ? REPRT_RECENT.slice(startIdx + 1) : REPRT_RECENT;
+      for (const rc of fallbackOrder) {
+        try {
+          const r2 = await fetch(`/api/financial?corp_code=${selectedCorp.corp_code}&bsns_year=${year}&reprt_code=${rc}`);
+          const d2 = await r2.json();
+          if (d2.status === '000' && Array.isArray(d2.list) && d2.list.length) {
+            document.getElementById('an-reprt').value = rc;  // 셀렉터를 실제 보고서로 동기화
+            data = d2;
+            break;
+          }
+        } catch (e) { /* 다음 후보 */ }
+      }
+    }
     if (data.status !== '000') throw new Error(data.message || '조회된 데이터가 없습니다');
 
+    // 폴백으로 보고서가 바뀌었을 수 있으니 실제 사용된 reprt를 다시 읽음
+    const reprtUsed = document.getElementById('an-reprt').value;
     let mainList = data.list;
 
     // ── 반기/분기 보고서의 경우 bfefrmtrm(전전기)가 없으면 전년도 동기 보고서를 추가 조회해 3개년 구성
@@ -1397,7 +1420,7 @@ async function fetchAndRender() {
     if (!hasThree) {
       try {
         const prevRes  = await fetch(
-          `/api/financial?corp_code=${selectedCorp.corp_code}&bsns_year=${year - 1}&reprt_code=${reprt}`
+          `/api/financial?corp_code=${selectedCorp.corp_code}&bsns_year=${year - 1}&reprt_code=${reprtUsed}`
         );
         const prevData = await prevRes.json();
         if (prevData.status === '000' && prevData.list && prevData.list.length > 0) {
