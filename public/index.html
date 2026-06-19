@@ -1005,7 +1005,8 @@
         <div id="val-content" style="display:none;">
           <div style="background:var(--card-alt,rgba(99,102,241,.08));border:1px solid var(--border,rgba(99,102,241,.25));border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.6;color:var(--text-muted);">
             ℹ️ <b>투자지표는 모두 4분기누적(TTM) 기준</b>입니다 — 분기/누적 토글이 없는 이유.<br>
-            PER·EPS·ROE·SPS·OCFPS 등은 <b>항상 최근 12개월 실적</b>으로 계산해야 분기별로 값이 4배씩 튀거나 계절성에 왜곡되지 않습니다. BPS·PBR 등 잔고성 지표는 분기말 시점값을 그대로 씁니다.
+            PER·EPS·ROE·SPS·OCFPS 등은 <b>항상 최근 12개월 실적</b>으로 계산해야 분기별로 값이 4배씩 튀거나 계절성에 왜곡되지 않습니다. BPS·PBR 등 잔고성 지표는 분기말 시점값을 그대로 씁니다.<br>
+            📈 <b>수정주가</b>: 네이버 월봉 종가(액면분할·유무상증자·배당락이 소급 반영된 보정 주가)를 <b>각 분기말일 기준 직전 거래일 종가</b>로 매핑한 값입니다.
           </div>
           <div class="chart-card"><div class="chart-title">ROE 듀퐁분석 (ROE = 순이익률 × 총자산회전율 × 레버리지)</div><div class="chart-sub" id="sub-val-roe"></div><div class="chart-outer"><span class="y-lbl">%</span><div class="chart-wrap"><canvas id="valRoeChart"></canvas></div><span class="y-lbl">×</span></div></div>
           <div class="chart-card"><div class="chart-title">PER 밴드 (주가 ÷ EPS, 우축: 수정주가)</div><div class="chart-sub" id="sub-val-per"></div><div class="chart-outer"><span class="y-lbl">배</span><div class="chart-wrap"><canvas id="valPerChart"></canvas></div><span class="y-lbl">원</span></div></div>
@@ -3448,7 +3449,7 @@ function renderValuation() {
 
   // ⑦ EPS·DPS (DPS는 연배당 → 그 해 분기에 동일 적용)
   const dps = pts.map(p => valExtra?.byYear?.[p.year]?.dps ?? null);
-  setTxt('sub-val-eps', 'EPS=주당순이익(TTM) · DPS=주당배당금(연) · 우축: 수정주가');
+  setTxt('sub-val-eps', 'EPS=주당순이익(TTM) · DPS=주당배당금(연, 사업보고서 확정 후) · 당해연도 배당 미확정 시 DPS 공백 · 우축: 수정주가');
   mkChart('valEpsChart', 'valEps', { data: { labels, datasets: [
     { type: 'line', label: 'EPS(원)', data: eps.map(v => v == null ? null : Math.round(v)), borderColor: '#ffa726', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
     { type: 'line', label: 'DPS(원)', data: dps, borderColor: '#9ccc65', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, stepped: true, order: 1 },
