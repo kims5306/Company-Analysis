@@ -531,7 +531,7 @@ async function fetchBusinessSummary(corpName, corpCode) {
   if (geminiRes.error) throw new Error(geminiRes.error.message || 'Gemini 오류');
   let out = geminiRes.candidates?.[0]?.content?.parts?.[0]?.text || '요약 생성 실패';
   out = out.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\uFFFD]/g, '');
-  return { summary: out, rcept_no: rcept };
+  return { summary: out, rcept_no: usedRcept };
 }
 
 function fetchDartList(params) {
