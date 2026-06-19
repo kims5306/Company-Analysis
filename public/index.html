@@ -975,7 +975,7 @@
           <div class="chart-card"><div class="chart-title">YoY 성장률 (매출/영업이익/순이익 전년동기比)</div><div class="chart-sub" id="sub-is-yoy"></div><div class="chart-outer"><span class="y-lbl">%</span><div class="chart-wrap"><canvas id="isYoyChart"></canvas></div></div></div>
           <div class="chart-card"><div class="chart-title">매출구성비율 (매출원가/판관비/영업이익 비중)</div><div class="chart-sub" id="sub-is-mix"></div><div class="chart-outer"><span class="y-lbl">%</span><div class="chart-wrap"><canvas id="isMixChart"></canvas></div></div></div>
           <div class="chart-card"><div class="chart-title">비용 YoY (매출원가/판관비 증가율)</div><div class="chart-sub" id="sub-is-cost"></div><div class="chart-outer"><span class="y-lbl">%</span><div class="chart-wrap"><canvas id="isCostChart"></canvas></div></div></div>
-          <div class="chart-card"><div class="chart-title">영업외손익 (영업이익 → 세전이익 → 순이익)</div><div class="chart-sub" id="sub-is-nonop"></div><div class="chart-outer"><span class="y-lbl">억원</span><div class="chart-wrap"><canvas id="isNonopChart"></canvas></div></div></div>
+          <div class="chart-card"><div class="chart-title">영업외손익 구조 (영업이익 + 영업외손익 → 세전이익 → 순이익)</div><div class="chart-sub" id="sub-is-nonop"></div><div class="chart-outer"><span class="y-lbl">억원</span><div class="chart-wrap"><canvas id="isNonopChart"></canvas></div></div></div>
         </div>
       </div>
       <!-- 사업정보 탭 -->
@@ -3140,13 +3140,15 @@ function renderISCharts() {
     { type:'line', label:'판관비 YoY', data:yoy(gSga), borderColor:FIN_COLORS.orange, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25 },
   ]}, options: pctLineOpts() });
 
-  // ⑤ 영업외손익: 영업이익 → 세전이익 → 순이익 (막대)
+  // ⑤ 영업외손익: 영업이익·세전이익·순이익 + 영업외손익(세전−영업)을 명시 막대로
   const opL=pts.map(p=>isVal(p,'영업이익')), pre=pts.map(p=>isVal(p,'법인세비용차감전순이익')), niL=pts.map(p=>netInc(p));
-  setTxt('sub-is-nonop', `${modeNote} 기준 · 영업이익→세전이익→순이익 · 최근 ${pts.length}개 분기`);
+  const nonOp=pts.map((p,i)=>{ const o=opL[i], pr=pre[i]; return (o!=null && pr!=null)? +(pr-o).toFixed(0) : null; }); // 영업외손익=세전−영업
+  setTxt('sub-is-nonop', `${modeNote} 기준 · 영업외손익=세전이익−영업이익 · 최근 ${pts.length}개 분기`);
   mkChart('isNonopChart','isNonop',{ data:{ labels, datasets:[
-    { type:'bar', label:'영업이익', data:opL, backgroundColor:'rgba(156,204,101,.65)' },
-    { type:'bar', label:'세전이익', data:pre, backgroundColor:'rgba(79,127,255,.55)' },
-    { type:'bar', label:'순이익', data:niL, backgroundColor:'rgba(255,167,38,.7)' },
+    { type:'bar', label:'영업이익', data:opL, backgroundColor:'rgba(156,204,101,.65)', order:3 },
+    { type:'bar', label:'영업외손익', data:nonOp, backgroundColor:'rgba(171,71,188,.7)', order:3 },
+    { type:'line', label:'세전이익', data:pre, borderColor:'#4f7fff', backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25, order:1 },
+    { type:'line', label:'순이익', data:niL, borderColor:'#ffa726', backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25, order:1 },
   ]}, options: finChartBase() });
 }
 
@@ -3363,8 +3365,10 @@ async function loadValuation() {
       const r = await fetch(`/api/financial-series?corp_code=${selectedCorp.corp_code}&years=5&fs_div=${fsDiv}`);
       seriesData = await r.json(); computeTTM(); seriesLoadedFor = selectedCorp.corp_code;
     }
-    // 2) 주식수·배당
-    const rv = await fetch(`/api/valuation-extra?corp_code=${selectedCorp.corp_code}&years=4`);
+    // 2) 주식수·배당 — 세부탭 시계열이 선택분기 기준 과거 12분기(약 3년)를 그리고
+    //    선택분기가 과거로 갈 수 있어, per-share(EPS/BPS/SPS 등) 계산용 주식수를
+    //    넉넉히 8년치 확보(years=4는 최근 4년만 줘서 과거 분기 per-share가 전부 null).
+    const rv = await fetch(`/api/valuation-extra?corp_code=${selectedCorp.corp_code}&years=8`);
     valExtra = await rv.json();
     // 3) 주가(네이버 월봉) — 분기말 종가 매핑용. 일봉(dayCandle)은 최근 ~110일만 줘서
     //    과거 분기말 종가가 비므로, 투자지표 탭은 monthCandle(약 9년치)을 별도 로드한다.
