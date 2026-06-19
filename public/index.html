@@ -2919,10 +2919,25 @@ function wonTick(v) {
 }
 // 우축(수정주가) 원 단위 — per-share 차트 공용
 const Y1_WON = { y1: { position:'right', ticks:{ color:'#999', callback:wonTick }, grid:{ display:false } } };
-// 좌축도 원 단위(BPS/EPS/SPS/OCFPS 등 per-share 값) — y축 포맷터 교체용
+// 좌축도 원 단위(BPS/EPS/SPS/OCFPS 등 per-share 값) — y축 포맷터 교체용.
+// 툴팁도 교체: 우축(y1=수정주가)은 항상 '원', 좌축은 데이터셋 label의 괄호 단위
+// (예: 'PER(배)'·'BPS(원)')를 그대로 따름. 값은 천단위 콤마로 표시(억 오표기 제거).
 function finChartBaseWon(extraY) {
   const base = finChartBase(extraY);
   base.scales.y.ticks.callback = wonTick;
+  base.plugins.tooltip = { callbacks: { label: (c) => {
+    const v = c.parsed.y;
+    if (v == null) return `${c.dataset.label}: -`;
+    // 우축(수정주가)은 원
+    if (c.dataset.yAxisID === 'y1') {
+      return `${c.dataset.label}: ${Math.round(v).toLocaleString('ko-KR')}원`;
+    }
+    // 좌축: label 괄호 안 단위(배/원 등) 추출, 없으면 단위 생략
+    const m = /\(([^)]+)\)/.exec(c.dataset.label || '');
+    const u = m ? m[1] : '';
+    const isMul = u === '배';
+    return `${c.dataset.label}: ${v.toLocaleString('ko-KR', { maximumFractionDigits: isMul ? 2 : 0 })}`;
+  } } };
   return base;
 }
 const Y1_CNT = { y1: { position:'right', ticks:{ color:'#999', callback:v=>v.toFixed(1) }, grid:{ display:false } } };
@@ -3377,14 +3392,14 @@ function renderValuation() {
   mkChart('valPerChart', 'valPer', { data: { labels, datasets: [
     { type: 'line', label: 'PER(배)', data: per, borderColor: '#ffa726', backgroundColor: 'rgba(255,167,38,.08)', borderWidth: 2, pointRadius: 2, tension: .25, fill: true, order: 1 },
     ...bandLines(per, 'rgba(255,167,38,.4)'), priceDs,
-  ]}, options: finChartBase(Y1_WON) });
+  ]}, options: finChartBaseWon(Y1_WON) });
 
   // ③ PBR 밴드
   setTxt('sub-val-pbr', 'PBR = 수정주가 ÷ BPS · 밴드 = 과거 분포 25/50/75%');
   mkChart('valPbrChart', 'valPbr', { data: { labels, datasets: [
     { type: 'line', label: 'PBR(배)', data: pbr, borderColor: '#ff5b7f', backgroundColor: 'rgba(255,91,127,.08)', borderWidth: 2, pointRadius: 2, tension: .25, fill: true, order: 1 },
     ...bandLines(pbr, 'rgba(255,91,127,.4)'), priceDs,
-  ]}, options: finChartBase(Y1_WON) });
+  ]}, options: finChartBaseWon(Y1_WON) });
 
   // ④ BPS
   setTxt('sub-val-bps', 'BPS = 자본총계 ÷ 상장주식수 · 우축: 수정주가');
