@@ -220,14 +220,15 @@ function fetchDartList(params) {
   });
 }
 
-function fetchDartAPI(params) {
+function fetchDartAPI(params, endpoint) {
   return new Promise((resolve, reject) => {
+    const ep = endpoint || 'fnlttSinglAcntAll';
     const qs = Object.entries(params)
       .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
       .join('&');
     const options = {
       hostname: 'opendart.fss.or.kr',
-      path: `/api/fnlttSinglAcnt.json?${qs}`,
+      path: `/api/${ep}.json?${qs}`,
       method: 'GET',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
@@ -248,6 +249,19 @@ function fetchDartAPI(params) {
     req.setTimeout(10000, () => { req.destroy(); reject(new Error('요청 시간 초과')); });
     req.end();
   });
+}
+
+// 전체계정(All) 우선, 빈 응답/오류면 요약본(Acnt) 폴백 — api/index.js와 동일.
+async function fetchFinancialMerged(baseParams) {
+  const tryAll = async (fs_div) => {
+    try {
+      const d = await fetchDartAPI({ ...baseParams, fs_div }, 'fnlttSinglAcntAll');
+      return (d && d.status === '000' && Array.isArray(d.list)) ? d.list : [];
+    } catch (e) { return []; }
+  };
+  let list = [...(await tryAll('CFS')), ...(await tryAll('OFS'))];
+  if (list.length) return { status: '000', list };
+  return await fetchDartAPI(baseParams, 'fnlttSinglAcnt');
 }
 
 // ──── Gemini API ──────────────────────────────────────────
@@ -311,7 +325,9 @@ function buildFinancialPrompt(corpName, year, fsDiv, list, discussionData = null
   const assets   = get('BS', '자산총계');
   const liab     = get('BS', '부채총계');
   const equity   = get('BS', '자본총계');
-
+  const cfo = get('CF', '영업활동현금흐름');
+  const cfi = get('CF', '투자활동현금흐름');
+  const cff = get('CF', '재무활동현금흐름');
   const fsNm = items[0]?.fs_nm || (fsDiv === 'CFS' ? '연결재무제표' : '재무제표');
   const y = [year - 2, year - 1, year];
 
@@ -358,7 +374,14 @@ ${row(netInc,   '당기순이익')}
 ${row(assets, '자산총계')}
 ${row(liab,   '부채총계')}
 ${row(equity, '자본총계')}
-
+${(cfo || cfi || cff) ? `
+### 현금흐름표 (실제로 들어온 현금 기준)
+| 항목 | ${y[0]}년 | ${y[1]}년 | ${y[2]}년 |
+|------|---------|---------|---------|
+${row(cfo, '영업활동현금흐름')}
+${row(cfi, '투자활동현금흐름')}
+${row(cff, '재무활동현금흐름')}
+` : ''}
 ### 주요 지표
 | 지표 | ${y[0]}년 | ${y[1]}년 | ${y[2]}년 |
 |------|---------|---------|---------|
@@ -382,7 +405,10 @@ ${row(equity, '자본총계')}
 
 ## 🏦 빚은 얼마나 있나요? (재무 건전성)
 (부채비율과 자본 구조의 안전성 설명)
-
+${(cfo || cfi || cff) ? `
+## 💵 진짜 현금은 잘 돌고 있나요? (현금흐름)
+(영업활동현금흐름이 플러스인지, 당기순이익과 비교해 '장부상 이익은 나는데 실제 현금은 마르는' 흑자도산 위험은 없는지 쉽게 설명. 투자활동·재무활동 현금흐름의 방향이 무엇을 의미하는지도 한 줄씩.)
+` : ''}
 ## ⭐ 이것만은 알아두세요
 (일반인이 주목해야 할 핵심 포인트 3가지를 번호로)`;
 
@@ -528,7 +554,7 @@ async function handleRequest(req, res) {
       res.end(JSON.stringify({ status: 'ERR', message: 'corp_code, bsns_year 필수' }));
       return;
     }
-    const data = await fetchDartAPI({
+    const data = await fetchFinancialMerged({
       crtfc_key: DART_API_KEY,
       corp_code,
       bsns_year,

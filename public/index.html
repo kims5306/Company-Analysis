@@ -2263,13 +2263,38 @@ function buildStockCharts() {
   // ── RCI 차트
   const rciResult = calcRCI(recent);
   const rciColors = { rci9:'#f38ba8', rci13:'#fab387', rci18:'#a6e3a1', rci26:'#89b4fa' };
+  // 🔻 저점집결 신호: 같은 날짜에 RCI 9·13·18·26 4선이 모두 -80 이하 = 과매도 뭉침(반등 후보).
+  // 투자봇과 동일 로직. 기존 4선은 그대로 두고 별도 마커 데이터셋으로 표시(안전).
+  const rciBottomSignals = (() => {
+    const series = ['rci9','rci13','rci18','rci26'].map(k => rciResult[k] || []);
+    if (series.some(s => !s.length)) return [];
+    const byDate = {};
+    series.forEach(s => s.forEach(pt => {
+      const t = +pt.x;
+      (byDate[t] = byDate[t] || []).push(pt.y);
+    }));
+    const out = [];
+    Object.keys(byDate).forEach(t => {
+      const ys = byDate[t];
+      if (ys.length === 4 && ys.every(y => y <= -80)) out.push({ x: +t, y: -92 });
+    });
+    return out;
+  })();
+  const rciDatasets = Object.entries(rciResult).map(([k,v])=>({
+    label:k.toUpperCase(), data:v,
+    borderColor:rciColors[k], borderWidth:1.2, pointRadius:0, tension:0.2
+  }));
+  if (rciBottomSignals.length) {
+    rciDatasets.push({
+      label:'🔻저점집결(4선 -80↓)', data: rciBottomSignals,
+      showLine:false, pointStyle:'triangle', pointRadius:7, rotation:180,
+      pointBackgroundColor:'#f38ba8', pointBorderColor:'#fff', pointBorderWidth:1
+    });
+  }
   stockCharts.rci = new Chart(document.getElementById('sc-rci').getContext('2d'), {
     type:'line',
     data:{
-      datasets: Object.entries(rciResult).map(([k,v])=>({
-        label:k.toUpperCase(), data:v,
-        borderColor:rciColors[k], borderWidth:1.2, pointRadius:0, tension:0.2
-      }))
+      datasets: rciDatasets
     },
     options:{
       ...baseOpts('RCI (%)', v=>v.toFixed(0)+'%'),

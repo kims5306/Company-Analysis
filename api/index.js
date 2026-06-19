@@ -16,6 +16,31 @@ const XML_PATH = path.join(process.cwd(), 'corp.xml');
 let corpList = [];
 let corpLoaded = false;
 
+// AI 분석 캐시 (모듈 스코프 — 같은 serverless 인스턴스 재사용 시 즉시 응답·Gemini 호출/토큰 절약).
+// Vercel은 stateless지만 웜 인스턴스가 흔히 재사용돼 효과적. TTL 12시간.
+const analysisCache = new Map();
+const ANALYSIS_TTL = 12 * 3600 * 1000;
+const ANALYSIS_CACHE_MAX = 200;
+function cacheGet(key) {
+  const e = analysisCache.get(key);
+  if (!e) return null;
+  if (Date.now() - e.ts > ANALYSIS_TTL) { analysisCache.delete(key); return null; }
+  return e.value;
+}
+function cacheSet(key, value) {
+  if (analysisCache.size >= ANALYSIS_CACHE_MAX) {
+    const oldest = analysisCache.keys().next().value;
+    analysisCache.delete(oldest);
+  }
+  analysisCache.set(key, { ts: Date.now(), value });
+}
+// 캐시 키용 경량 해시(djb2)
+function hashStr(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
 // ──── Corp XML ────────────────────────────────────────────
 function parseXML(xmlContent) {
   const results = [];
@@ -179,11 +204,13 @@ function dartRequest(options) {
   });
 }
 
-function fetchDartAPI(params) {
+function fetchDartAPI(params, endpoint) {
+  // endpoint 미지정 시 전체계정(All) 우선 — 판관비·R&D·현금흐름 등 풍부. 호출부에서 폴백 처리.
+  const ep = endpoint || 'fnlttSinglAcntAll';
   const qs = Object.entries(params).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
   return dartRequest({
     hostname: 'opendart.fss.or.kr',
-    path: `/api/fnlttSinglAcnt.json?${qs}`,
+    path: `/api/${ep}.json?${qs}`,
     method: 'GET',
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
@@ -192,6 +219,23 @@ function fetchDartAPI(params) {
       'Referer': 'https://opendart.fss.or.kr/',
     },
   });
+}
+
+// 전체계정(All) 우선, 빈 응답/오류면 요약본(Acnt)로 폴백 — 데이터 손실 0 보장.
+// All은 fnlttSinglAcntAll 스펙상 fs_div 구분을 위해 fs_div 파라미터가 필요할 수 있어 양쪽(CFS/OFS) 시도.
+async function fetchFinancialMerged(baseParams) {
+  // 1) 전체계정: CFS(연결) + OFS(별도) 둘 다 받아 합침
+  const tryAll = async (fs_div) => {
+    try {
+      const d = await fetchDartAPI({ ...baseParams, fs_div }, 'fnlttSinglAcntAll');
+      return (d && d.status === '000' && Array.isArray(d.list)) ? d.list : [];
+    } catch (e) { return []; }
+  };
+  let list = [...(await tryAll('CFS')), ...(await tryAll('OFS'))];
+  if (list.length) return { status: '000', list };
+  // 2) 폴백: 기존 요약본(파라미터에 fs_div 없음 — 단일계정 API는 자동 구분)
+  const d = await fetchDartAPI(baseParams, 'fnlttSinglAcnt');
+  return d;
 }
 
 function fetchDartList(params) {
@@ -267,6 +311,10 @@ function buildFinancialPrompt(corpName, year, fsDiv, list, discussionData = null
   const assets   = get('BS', '자산총계');
   const liab     = get('BS', '부채총계');
   const equity   = get('BS', '자본총계');
+  // 현금흐름표(전체계정 API에서만 제공). 없으면 표에서 자동 생략.
+  const cfo = get('CF', '영업활동현금흐름');
+  const cfi = get('CF', '투자활동현금흐름');
+  const cff = get('CF', '재무활동현금흐름');
   const fsNm = items[0]?.fs_nm || (fsDiv === 'CFS' ? '연결재무제표' : '재무제표');
   const y = [year - 2, year - 1, year];
   const row = (item, label) => {
@@ -299,7 +347,14 @@ ${row(netInc,   '당기순이익')}
 ${row(assets, '자산총계')}
 ${row(liab,   '부채총계')}
 ${row(equity, '자본총계')}
-
+${(cfo || cfi || cff) ? `
+### 현금흐름표 (실제로 들어온 현금 기준)
+| 항목 | ${y[0]}년 | ${y[1]}년 | ${y[2]}년 |
+|------|---------|---------|---------|
+${row(cfo, '영업활동현금흐름')}
+${row(cfi, '투자활동현금흐름')}
+${row(cff, '재무활동현금흐름')}
+` : ''}
 ### 주요 지표
 | 지표 | ${y[0]}년 | ${y[1]}년 | ${y[2]}년 |
 |------|---------|---------|---------|
@@ -323,7 +378,10 @@ ${row(equity, '자본총계')}
 
 ## 🏦 빚은 얼마나 있나요? (재무 건전성)
 (부채비율과 자본 구조의 안전성 설명)
-
+${(cfo || cfi || cff) ? `
+## 💵 진짜 현금은 잘 돌고 있나요? (현금흐름)
+(영업활동현금흐름이 플러스인지, 당기순이익과 비교해 '장부상 이익은 나는데 실제 현금은 마르는' 흑자도산 위험은 없는지 쉽게 설명. 투자활동·재무활동 현금흐름의 방향이 무엇을 의미하는지도 한 줄씩.)
+` : ''}
 ## ⭐ 이것만은 알아두세요
 (일반인이 주목해야 할 핵심 포인트 3가지를 번호로)`;
 
@@ -425,7 +483,7 @@ module.exports = async (req, res) => {
     if (pathname === '/api/financial') {
       const { corp_code, bsns_year, reprt_code } = query;
       if (!corp_code || !bsns_year) { res.writeHead(400); res.end(JSON.stringify({ status: 'ERR', message: 'corp_code, bsns_year 필수' })); return; }
-      const data = await fetchDartAPI({ crtfc_key: DART_API_KEY, corp_code, bsns_year, reprt_code: reprt_code || '11011' });
+      const data = await fetchFinancialMerged({ crtfc_key: DART_API_KEY, corp_code, bsns_year, reprt_code: reprt_code || '11011' });
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify(data));
       return;
@@ -437,12 +495,21 @@ module.exports = async (req, res) => {
       const { corpName, year, fsDiv, list, discussionData } = JSON.parse(bodyStr);
       const prompt = buildFinancialPrompt(corpName, parseInt(year), fsDiv, list, discussionData);
       if (!prompt) { res.writeHead(400); res.end(JSON.stringify({ error: '분석할 데이터가 없습니다' })); return; }
+      // 캐시 키 = 기업·연도·재무구분 + 프롬프트 해시(토론방 포함 내용 바뀌면 새로 분석)
+      const cacheKey = `${corpName}|${year}|${fsDiv}|${prompt.length}|${hashStr(prompt)}`;
+      const cached = cacheGet(cacheKey);
+      if (cached) {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ analysis: cached, model: GEMINI_MODEL, cached: true }));
+        return;
+      }
       const geminiRes = await callGemini(GEMINI_MODEL, prompt);
       if (geminiRes.error) throw new Error(geminiRes.error.message || 'Gemini API 오류');
       let analysis = geminiRes.candidates?.[0]?.content?.parts?.[0]?.text || '분석 결과를 가져올 수 없습니다.';
       analysis = analysis.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\uFFFD]/g, '');
+      cacheSet(cacheKey, analysis);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ analysis, model: GEMINI_MODEL }));
+      res.end(JSON.stringify({ analysis, model: GEMINI_MODEL, cached: false }));
       return;
     }
 
