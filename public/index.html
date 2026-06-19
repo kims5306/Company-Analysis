@@ -2909,6 +2909,22 @@ function mkChart(id, key, cfg) {
 }
 const Y1_PCT = { y1: { position:'right', ticks:{ color:'#999', callback:v=>v.toFixed(0)+'%' }, grid:{ display:false } } };
 const Y1_NUM = { y1: { position:'right', ticks:{ color:'#999', callback:v=>(Math.abs(v)>=10000?(v/10000).toFixed(1)+'조':v.toLocaleString('ko-KR')) }, grid:{ display:false } } };
+// 원(₩) 단위 축 포맷: 투자지표(수정주가·BPS·EPS·SPS 등)는 데이터가 '원'이라
+// 억원 가정 포맷터(Y1_NUM)를 쓰면 46,858원→4.7조로 깨짐. 만/억 단위로 축약.
+function wonTick(v) {
+  const a = Math.abs(v);
+  if (a >= 1e8) return (v/1e8).toFixed(1)+'억';
+  if (a >= 1e4) return (v/1e4).toFixed(a>=1e5?0:1)+'만';
+  return Math.round(v).toLocaleString('ko-KR');
+}
+// 우축(수정주가) 원 단위 — per-share 차트 공용
+const Y1_WON = { y1: { position:'right', ticks:{ color:'#999', callback:wonTick }, grid:{ display:false } } };
+// 좌축도 원 단위(BPS/EPS/SPS/OCFPS 등 per-share 값) — y축 포맷터 교체용
+function finChartBaseWon(extraY) {
+  const base = finChartBase(extraY);
+  base.scales.y.ticks.callback = wonTick;
+  return base;
+}
 const Y1_CNT = { y1: { position:'right', ticks:{ color:'#999', callback:v=>v.toFixed(1) }, grid:{ display:false } } };
 
 // ── 재무상태표 7차트 ───────────────────────────────────
@@ -3357,25 +3373,25 @@ function renderValuation() {
   const bandLines = (vals, color) => { const lo = percentile(vals, .25), mid = percentile(vals, .5), hi = percentile(vals, .75); return [lo, mid, hi].map((b, k) => ({ type: 'line', label: ['하단', '중간', '상단'][k] + '밴드', data: labels.map(() => b), borderColor: color, borderWidth: 1, borderDash: [6, 4], pointRadius: 0, tension: 0, order: 2 })); };
 
   // ② PER 밴드
-  setTxt('sub-val-per', 'PER = 수정주가 ÷ EPS(TTM) · 밴드 = 과거 분포 25/50/75%');
+  setTxt('sub-val-per', 'PER = 수정주가 ÷ EPS(TTM) · 밴드 = 과거 분포 25/50/75% · 적자(EPS≤0) 분기는 PER 미표시');
   mkChart('valPerChart', 'valPer', { data: { labels, datasets: [
     { type: 'line', label: 'PER(배)', data: per, borderColor: '#ffa726', backgroundColor: 'rgba(255,167,38,.08)', borderWidth: 2, pointRadius: 2, tension: .25, fill: true, order: 1 },
     ...bandLines(per, 'rgba(255,167,38,.4)'), priceDs,
-  ]}, options: finChartBase(Y1_NUM) });
+  ]}, options: finChartBase(Y1_WON) });
 
   // ③ PBR 밴드
   setTxt('sub-val-pbr', 'PBR = 수정주가 ÷ BPS · 밴드 = 과거 분포 25/50/75%');
   mkChart('valPbrChart', 'valPbr', { data: { labels, datasets: [
     { type: 'line', label: 'PBR(배)', data: pbr, borderColor: '#ff5b7f', backgroundColor: 'rgba(255,91,127,.08)', borderWidth: 2, pointRadius: 2, tension: .25, fill: true, order: 1 },
     ...bandLines(pbr, 'rgba(255,91,127,.4)'), priceDs,
-  ]}, options: finChartBase(Y1_NUM) });
+  ]}, options: finChartBase(Y1_WON) });
 
   // ④ BPS
   setTxt('sub-val-bps', 'BPS = 자본총계 ÷ 상장주식수 · 우축: 수정주가');
   mkChart('valBpsChart', 'valBps', { data: { labels, datasets: [
     { type: 'line', label: 'BPS(원)', data: bps.map(v => v == null ? null : Math.round(v)), borderColor: '#ff5b7f', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
     priceDs,
-  ]}, options: finChartBase(Y1_NUM) });
+  ]}, options: finChartBaseWon(Y1_WON) });
 
   // ⑤ SPS·OPS
   setTxt('sub-val-sps', 'SPS=주당매출 · OPS=주당영업이익 (TTM) · 우축: 수정주가');
@@ -3383,7 +3399,7 @@ function renderValuation() {
     { type: 'line', label: 'SPS(원)', data: sps.map(v => v == null ? null : Math.round(v)), borderColor: '#4f7fff', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
     { type: 'line', label: 'OPS(원)', data: ops.map(v => v == null ? null : Math.round(v)), borderColor: '#ffd54f', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
     priceDs,
-  ]}, options: finChartBase(Y1_NUM) });
+  ]}, options: finChartBaseWon(Y1_WON) });
 
   // ⑥ OCFPS·FCFPS
   setTxt('sub-val-ocf', 'OCFPS=주당영업현금흐름 · FCFPS=주당잉여현금흐름 (TTM) · 우축: 수정주가');
@@ -3391,7 +3407,7 @@ function renderValuation() {
     { type: 'line', label: 'OCFPS(원)', data: ocfps.map(v => v == null ? null : Math.round(v)), borderColor: '#4f7fff', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
     { type: 'line', label: 'FCFPS(원)', data: fcfps.map(v => v == null ? null : Math.round(v)), borderColor: '#ffd54f', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
     priceDs,
-  ]}, options: finChartBase(Y1_NUM) });
+  ]}, options: finChartBaseWon(Y1_WON) });
 
   // ⑦ EPS·DPS (DPS는 연배당 → 그 해 분기에 동일 적용)
   const dps = pts.map(p => valExtra?.byYear?.[p.year]?.dps ?? null);
@@ -3400,7 +3416,7 @@ function renderValuation() {
     { type: 'line', label: 'EPS(원)', data: eps.map(v => v == null ? null : Math.round(v)), borderColor: '#ffa726', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
     { type: 'line', label: 'DPS(원)', data: dps, borderColor: '#9ccc65', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, stepped: true, order: 1 },
     priceDs,
-  ]}, options: finChartBase(Y1_NUM) });
+  ]}, options: finChartBaseWon(Y1_WON) });
 }
 </script>
 <!-- ── Footer ── -->
