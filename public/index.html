@@ -2920,10 +2920,32 @@ function computeTTM() {
   });
   const isKeys = pts[0] && pts[0].isQ ? Object.keys(pts[0].isQ) : [];
   const cfKeys = pts[0] && pts[0].cfQ ? Object.keys(pts[0].cfQ) : [];
+  // CF 누적값(cfC) 인덱스: year|q → 그 시점 YTD 누적. 분기 차분이 깨져도(일부 기업이 3분기보고서에서
+  // CF 세부항목 생략 → 분기 단독값 null) 누적값은 살아있어, TTM을 누적 기반으로 견고하게 계산하기 위함.
+  const cfCidx = {};
+  pts.forEach(p => { if (p && p.q != null) cfCidx[`${p.year}|${p.q}`] = p; });
+  // CF TTM(최근 12개월) = 올해 그 분기까지 누적(cfC[i]) + 작년 잔여(작년말 누적 − 작년 동분기 누적).
+  // 1Q면 작년말−작년1Q = 작년 2~4Q, + 올해 1Q ⇒ 정확히 최근 4분기. 누적값만 쓰므로 분기 차분 null에 강함.
+  function cfTTMviaCumulative(p, acct) {
+    const cur = p.cfC ? p.cfC[acct] : null;           // 올해 그 분기까지 누적
+    if (cur == null) return null;
+    const py = p.year - 1;
+    const prevYE = cfCidx[`${py}|4Q`];                // 작년 사업보고서(연간 누적)
+    const prevSame = cfCidx[`${py}|${p.q}`];          // 작년 동분기 누적
+    if (!prevYE || !prevSame) return null;
+    const ye = prevYE.cfC ? prevYE.cfC[acct] : null;
+    const ps = prevSame.cfC ? prevSame.cfC[acct] : null;
+    if (ye == null || ps == null) return null;
+    return cur + (ye - ps);
+  }
   pts.forEach((p, i) => {
     p.isT = {}; p.cfT = {};
     isKeys.forEach(a => { p.isT[a] = ttmSum(pts, i, x => x.isQ ? x.isQ[a] : null); });
-    cfKeys.forEach(a => { p.cfT[a] = ttmSum(pts, i, x => x.cfQ ? x.cfQ[a] : null); });
+    // CF는 누적 기반 TTM을 우선 — 실패 시(작년 데이터 부족 등) 기존 분기합으로 폴백.
+    cfKeys.forEach(a => {
+      const viaCum = cfTTMviaCumulative(p, a);
+      p.cfT[a] = (viaCum != null) ? viaCum : ttmSum(pts, i, x => x.cfQ ? x.cfQ[a] : null);
+    });
   });
 }
 function finChartBase(extraY) {

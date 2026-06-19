@@ -369,6 +369,23 @@ async function fetchFinancialSeries(corpCode, years, fsDiv) {
         if (!niHit) niHit = d.list.find(it => inISDiv(it) && /(당기|분기|반기)순이익/.test(normNm(it.account_nm)) && !/주당|법인세|계속영업|중단|지배|비지배|포괄/.test(normNm(it.account_nm)));
         is._ni = niHit ? { amt: toNum(niHit.thstrm_amount), add: toNum(niHit.thstrm_add_amount) } : { amt: null, add: null };
         const cf = {}; CF_ACCTS.forEach(a => { cf[a] = pickField(d.list, 'CF', a, missSink).amt; });
+        // 🔴 CAPEX(유형자산의취득) 폴백 — 일부 기업(전방 등)은 반기·3분기 보고서에서 통합 CAPEX 대신
+        //    세부 항목(기계장치/건설중인자산/집기/차량운반구/토지/건물 등의 취득)으로 쪼개 제출.
+        //    통합 계정이 없으면 유형자산 구성요소 '취득'을 합산해 복구. 금융상품·무형·투자자산·기업취득은 제외.
+        if (cf['유형자산의취득'] == null) {
+          const PPE = /(유형자산|기계장치|건설중인?자산|집기|공구|기구|비품|차량운반구|선박|토지|건물|구축물|시설장치|비행기|항공기)/;
+          const EXCL = /(금융상품|무형자산|투자자산|투자부동산|종속기업|관계기업|공동기업|지분|사업결합|영업권|리스|매도가능|상각후원가|당기손익)/;
+          let sum = null;
+          for (const it of d.list) {
+            if (it.sj_div !== 'CF') continue;
+            const nm = normNm(it.account_nm);
+            if (!/취득|증가/.test(nm)) continue;
+            if (!PPE.test(nm) || EXCL.test(nm)) continue;
+            const v = toNum(it.thstrm_amount);
+            if (v != null) sum = (sum == null ? 0 : sum) + v;
+          }
+          if (sum != null) cf['유형자산의취득'] = sum;
+        }
         raw[y][q] = { bs, is, cf };
       })());
     }
