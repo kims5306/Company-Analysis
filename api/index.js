@@ -266,7 +266,7 @@ const ACCT_IDS = {
   '영업이익': ['dart_OperatingIncomeLoss', 'ifrs-full_ProfitLossFromOperatingActivities'],
   '판매비와관리비': ['dart_TotalSellingGeneralAdministrativeExpenses', 'ifrs-full_SellingGeneralAndAdministrativeExpense'],
   '당기순이익(손실)': ['ifrs-full_ProfitLoss'],
-  '법인세비용차감전순이익': ['ifrs-full_ProfitLossBeforeTax'],
+  '법인세비용차감전순이익': ['ifrs-full_ProfitLossBeforeTax', 'ifrs_ProfitLossBeforeTax'],
   '지배기업소유주순이익': ['ifrs-full_ProfitLossAttributableToOwnersOfParent'],
   // CF
   '영업활동현금흐름': ['ifrs-full_CashFlowsFromUsedInOperatingActivities'],
@@ -298,7 +298,7 @@ const ACCT_ALIASES = {
   '매출총이익': ['매출총이익', '매출총이익(손실)'],
   '영업이익': ['영업이익', '영업이익(손실)'],
   '판매비와관리비': ['판매비와관리비', '판매비와관리비(물류원가등포함)'],
-  '법인세비용차감전순이익': ['법인세비용차감전순이익', '법인세차감전순이익', '법인세비용차감전계속영업이익', '법인세차감전계속영업이익', '법인세비용차감전순손익', '계속영업법인세비용차감전순이익'],
+  '법인세비용차감전순이익': ['법인세비용차감전순이익', '법인세비용차감전순이익(손실)', '법인세차감전순이익', '법인세차감전순이익(손실)', '법인세차감전 순이익', '법인세비용차감전계속영업이익', '법인세차감전계속영업이익', '법인세비용차감전순손익', '계속영업법인세비용차감전순이익'],
   '영업활동현금흐름': ['영업활동현금흐름', '영업활동으로인한현금흐름', '영업활동으로인한순현금흐름'],
   '투자활동현금흐름': ['투자활동현금흐름', '투자활동으로인한현금흐름', '투자활동으로인한순현금흐름'],
   '재무활동현금흐름': ['재무활동현금흐름', '재무활동으로인한현금흐름', '재무활동으로인한순현금흐름'],
@@ -859,7 +859,7 @@ module.exports = async (req, res) => {
     if (pathname === '/api/financial-series') {
       const { corp_code, years, fs_div } = query;
       if (!corp_code) { res.writeHead(400); res.end(JSON.stringify({ status: 'ERR', message: 'corp_code 필수' })); return; }
-      const yN = Math.min(Math.max(parseInt(years) || 3, 1), 6);   // 1~6년, 기본 3
+      const yN = Math.min(Math.max(parseInt(years) || 3, 1), 12);  // 1~12년, 기본 3 (TTM lead-in 포함 2019~ 표시 위해 상한 확대)
       const fs = fs_div === 'OFS' ? 'OFS' : 'CFS';
       const cacheKey = `series|${corp_code}|${yN}|${fs}`;
       const hit = seriesGet(cacheKey);

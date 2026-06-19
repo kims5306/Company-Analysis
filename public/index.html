@@ -1165,7 +1165,7 @@ fetch('/api/stats').then(r => r.json()).then(d => {
 
 const yearSel = document.getElementById('an-year');
 const currentYear = new Date().getFullYear();
-for (let y = currentYear; y >= 2015; y--) {
+for (let y = currentYear; y >= 2019; y--) {
   const o = document.createElement('option');
   o.value = y; o.textContent = `${y}년`;
   if (y === currentYear) o.selected = true;
@@ -2824,7 +2824,7 @@ async function loadFinanceSeries() {
   document.getElementById('fin-loading').style.display = '';
   document.querySelectorAll('.fin-sub-content').forEach(c => c.style.display = 'none');
   try {
-    const r = await fetch(`/api/financial-series?corp_code=${selectedCorp.corp_code}&years=8&fs_div=${fsDiv}`);
+    const r = await fetch(`/api/financial-series?corp_code=${selectedCorp.corp_code}&years=12&fs_div=${fsDiv}`);
     seriesData = await r.json();
     computeTTM();
     seriesLoadedFor = selectedCorp.corp_code;
@@ -3362,7 +3362,7 @@ async function loadValuation() {
     // 1) 시계열(재무) — 재무탭과 공유(없으면 로드)
     if (!seriesData || seriesLoadedFor !== selectedCorp.corp_code) {
       const fsDiv = (typeof currentFSDiv !== 'undefined' && currentFSDiv) ? currentFSDiv : 'CFS';
-      const r = await fetch(`/api/financial-series?corp_code=${selectedCorp.corp_code}&years=8&fs_div=${fsDiv}`);
+      const r = await fetch(`/api/financial-series?corp_code=${selectedCorp.corp_code}&years=12&fs_div=${fsDiv}`);
       seriesData = await r.json(); computeTTM(); seriesLoadedFor = selectedCorp.corp_code;
     }
     // 2) 주식수·배당 — 세부탭 시계열이 선택분기 기준 과거 12분기(약 3년)를 그리고
