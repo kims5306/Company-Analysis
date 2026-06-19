@@ -956,6 +956,9 @@
               <div class="chart-wrap"><canvas id="cfMainChart"></canvas></div>
             </div>
           </div>
+          <div class="chart-card"><div class="chart-title">CAPEX (막대: CAPEX/FCF · 선: 영업현금흐름)</div><div class="chart-sub" id="sub-cf-capex"></div><div class="chart-outer"><span class="y-lbl">억원</span><div class="chart-wrap"><canvas id="cfCapexChart"></canvas></div></div></div>
+          <div class="chart-card"><div class="chart-title">CAPEX실적분석 (막대: CAPEX · 선: 영업이익, 우축: 매출액)</div><div class="chart-sub" id="sub-cf-capexperf"></div><div class="chart-outer"><span class="y-lbl">억원</span><div class="chart-wrap"><canvas id="cfCapexPerfChart"></canvas></div><span class="y-lbl">억원</span></div></div>
+          <div class="chart-card"><div class="chart-title">잉여현금흐름 (막대: FCF/CAPEX · 선: 영업현금흐름)</div><div class="chart-sub" id="sub-cf-fcf"></div><div class="chart-outer"><span class="y-lbl">억원</span><div class="chart-wrap"><canvas id="cfFcfChart"></canvas></div></div></div>
         </div>
         <div class="fin-sub-content" id="fsub-bs" style="display:none;">
           <div class="chart-card"><div class="chart-title">재무구조 (자본+부채 = 자산, 우축: 부채비율)</div><div class="chart-sub" id="sub-bs-struct"></div><div class="chart-outer"><span class="y-lbl">억원</span><div class="chart-wrap"><canvas id="bsStructChart"></canvas></div><span class="y-lbl">%</span></div></div>
@@ -2792,7 +2795,7 @@ const EOK = 1e8; // 억원 환산
 
 function renderFinCharts() {
   if (!seriesData) return;
-  if (finSub === 'cf') renderCFMain();
+  if (finSub === 'cf') { renderCFMain(); renderCFCapex(); renderCFCapexPerf(); renderCFFcf(); }
   else if (finSub === 'bs') renderBSCharts();
   else if (finSub === 'is') renderISCharts();
 }
@@ -3073,6 +3076,54 @@ function renderCFMain() {
       }
     }
   });
+}
+
+// CAPEX: 막대=CAPEX/FCF, 선=영업현금흐름  (① 현금흐름분석과 데이터 공유, 표현만 다름)
+function renderCFCapex() {
+  const pts = recentPoints(12); if (!pts.length) return;
+  const labels = pts.map(p => p.label);
+  const cfo = pts.map(p => cfVal(p, '영업활동현금흐름'));
+  const capex = pts.map(p => cfVal(p, '유형자산의취득'));
+  const fcf = pts.map((p, i) => (cfo[i] == null || capex[i] == null) ? null : cfo[i] - capex[i]);
+  const modeLbl = finMode === 'cumulative' ? '누적(YTD)' : (finMode === 'ttm' ? '4분기누적(TTM)' : '분기');
+  setTxt('sub-cf-capex', `${modeLbl} 기준 · 최근 ${pts.length}개 분기 · 단위 억원 · CAPEX = 유형자산의취득`);
+  mkChart('cfCapexChart', 'cfCapex', { data: { labels, datasets: [
+    { type: 'bar', label: 'CAPEX', data: capex, backgroundColor: 'rgba(255,167,38,.7)', order: 3 },
+    { type: 'bar', label: 'FCF', data: fcf, backgroundColor: 'rgba(79,127,255,.55)', order: 3 },
+    { type: 'line', label: '영업활동현금흐름', data: cfo, borderColor: '#ff5b7f', backgroundColor: 'transparent', tension: .25, borderWidth: 2, pointRadius: 2, order: 1 },
+  ] }, options: finChartBase() });
+}
+
+// CAPEX실적분석: 막대=CAPEX, 선=영업이익(좌축) + 매출액(우축).  투자→실적 연결성 점검(시총은 주식탭 펜딩이라 제외)
+function renderCFCapexPerf() {
+  const pts = recentPoints(12); if (!pts.length) return;
+  const labels = pts.map(p => p.label);
+  const capex = pts.map(p => cfVal(p, '유형자산의취득'));
+  const op = pts.map(p => isVal(p, '영업이익'));
+  const sales = pts.map(p => isVal(p, '매출액'));
+  const modeLbl = finMode === 'cumulative' ? '누적(YTD)' : (finMode === 'ttm' ? '4분기누적(TTM)' : '분기');
+  setTxt('sub-cf-capexperf', `${modeLbl} 기준 · 최근 ${pts.length}개 분기 · 좌축 CAPEX/영업이익, 우축 매출액 (억원)`);
+  mkChart('cfCapexPerfChart', 'cfCapexPerf', { data: { labels, datasets: [
+    { type: 'bar', label: 'CAPEX', data: capex, backgroundColor: 'rgba(255,167,38,.7)', order: 3 },
+    { type: 'line', label: '영업이익', data: op, borderColor: '#ff5b7f', backgroundColor: 'transparent', tension: .25, borderWidth: 2, pointRadius: 2, order: 1 },
+    { type: 'line', label: '매출액', data: sales, yAxisID: 'y1', borderColor: '#4f7fff', backgroundColor: 'transparent', tension: .25, borderWidth: 2, pointRadius: 2, order: 1 },
+  ] }, options: finChartBase(Y1_NUM) });
+}
+
+// 잉여현금흐름(FCF): 막대=FCF/CAPEX, 선=영업현금흐름  (① 와 데이터 공유, 막대 구성만 다름)
+function renderCFFcf() {
+  const pts = recentPoints(12); if (!pts.length) return;
+  const labels = pts.map(p => p.label);
+  const cfo = pts.map(p => cfVal(p, '영업활동현금흐름'));
+  const capex = pts.map(p => cfVal(p, '유형자산의취득'));
+  const fcf = pts.map((p, i) => (cfo[i] == null || capex[i] == null) ? null : cfo[i] - capex[i]);
+  const modeLbl = finMode === 'cumulative' ? '누적(YTD)' : (finMode === 'ttm' ? '4분기누적(TTM)' : '분기');
+  setTxt('sub-cf-fcf', `${modeLbl} 기준 · 최근 ${pts.length}개 분기 · 단위 억원 · FCF = 영업CF − CAPEX`);
+  mkChart('cfFcfChart', 'cfFcf', { data: { labels, datasets: [
+    { type: 'bar', label: 'FCF(잉여현금흐름)', data: fcf, backgroundColor: 'rgba(79,127,255,.55)', order: 3 },
+    { type: 'bar', label: 'CAPEX', data: capex, backgroundColor: 'rgba(255,167,38,.7)', order: 3 },
+    { type: 'line', label: '영업활동현금흐름', data: cfo, borderColor: '#ff5b7f', backgroundColor: 'transparent', tension: .25, borderWidth: 2, pointRadius: 2, order: 1 },
+  ] }, options: finChartBase() });
 }
 
 // ════════════ 사업정보 탭 ════════════
