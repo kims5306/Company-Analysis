@@ -25,6 +25,11 @@ const PORT = 3000;
 const XML_PATH = path.join(__dirname, 'corp.xml');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
+// 🔴 백엔드 단일 소스: 모든 /api/* 는 api/index.js 핸들러에 위임(드리프트 방지).
+// .env 로딩(위 loadEnv) 후 require해야 process.env가 잡힘. Vercel 진입점=server.js라
+// 과거 server.js 라우터가 옛 코드를 응답하던 사고(employees 404·_ni 미보존) 재발 차단.
+const apiHandler = require('./api/index.js');
+
 const DART_API_KEY = process.env.DART_API_KEY || '';
 const GEMINI_KEY   = process.env.GEMINI_KEY   || '';
 const GEMINI_MODEL = 'gemini-3.1-flash-lite-preview';
@@ -526,177 +531,9 @@ async function handleRequest(req, res) {
 
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
-  // ── Search
-  if (pathname === '/api/search') {
-    const results = searchCorps(query.q || '', parseInt(query.limit) || 100);
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ total: results.length, results }));
-    return;
-  }
-
-  // ── Stats
-  if (pathname === '/api/stats') {
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ total: corpList.length }));
-    return;
-  }
-
-  // ── DART 정기공시 목록
-  if (pathname === '/api/reports') {
-    const { corp_code } = query;
-    if (!corp_code) {
-      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: 'corp_code required' }));
-      return;
-    }
-    // 최근 3년치 정기공시 조회
-    const today = new Date();
-    const bgn = `${today.getFullYear() - 3}0101`;
-    const raw = await fetchDartList({
-      crtfc_key: DART_API_KEY,
-      corp_code,
-      bgn_de: bgn,
-      pblntf_ty: 'A',   // 정기공시
-      page_count: 40,
-    });
-
-    if (!raw || raw.status !== '000') {
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ list: [] }));
-      return;
-    }
-
-    // 분석 가능한 보고서만 필터링 + bsns_year / reprt_code 추론
-    const VALID = ['사업보고서','반기보고서','분기보고서','1분기보고서','3분기보고서'];
-    const enriched = (raw.list || [])
-      .filter(r => VALID.some(k => r.report_nm.includes(k)))
-      .map(r => {
-        const nm   = r.report_nm;
-        const yr   = parseInt(r.rcept_dt.substring(0, 4));
-        const mon  = parseInt(r.rcept_dt.substring(4, 6));
-        let reprt_code, bsns_year;
-
-        if (nm.includes('사업보고서')) {
-          reprt_code = '11011';
-          bsns_year  = mon <= 6 ? yr - 1 : yr;
-        } else if (nm.includes('반기보고서')) {
-          reprt_code = '11012';
-          bsns_year  = yr;
-        } else if (nm.includes('1분기') || (nm.includes('분기') && (mon >= 4 && mon <= 7))) {
-          reprt_code = '11013';
-          bsns_year  = yr;
-        } else {
-          reprt_code = '11014';
-          bsns_year  = yr;
-        }
-        return { ...r, reprt_code, bsns_year };
-      });
-
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ list: enriched }));
-    return;
-  }
-
-  // ── Naver 토론방 키워드 + 최신글 proxy
-  if (pathname === '/api/discussion') {
-    const { code } = query;
-    if (!code) {
-      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ success: false, error: 'code required' }));
-      return;
-    }
-    const result = await fetchDiscussion(code);
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify(result));
-    return;
-  }
-
-  // ── Naver stock chart proxy
-  if (pathname === '/api/stock-chart') {
-    const { code } = query;
-    if (!code) {
-      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: 'code required' }));
-      return;
-    }
-    const data = await fetchNaverStock(code);
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify(data));
-    return;
-  }
-
-  // ── Financial data proxy
-  if (pathname === '/api/financial') {
-    const { corp_code, bsns_year, reprt_code } = query;
-    if (!corp_code || !bsns_year) {
-      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ status: 'ERR', message: 'corp_code, bsns_year 필수' }));
-      return;
-    }
-    const data = await fetchDartAPI({
-      crtfc_key: DART_API_KEY,
-      corp_code,
-      bsns_year,
-      reprt_code: reprt_code || '11011',
-    });
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify(data));
-    return;
-  }
-
-  // ── 재무 분기 시계열 (ver2.0 세부정보 탭)
-  if (pathname === '/api/financial-series') {
-    const { corp_code, years, fs_div } = query;
-    if (!corp_code) { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ status: 'ERR', message: 'corp_code 필수' })); return; }
-    const yN = Math.min(Math.max(parseInt(years) || 3, 1), 6);
-    const fs = fs_div === 'OFS' ? 'OFS' : 'CFS';
-    const cacheKey = `series|${corp_code}|${yN}|${fs}`;
-    const hit = seriesGet(cacheKey);
-    if (hit) { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ...hit, cached: true })); return; }
-    const data = await fetchFinancialSeries(corp_code, yN, fs);
-    seriesSet(cacheKey, data);
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ ...data, cached: false }));
-    return;
-  }
-
-  // ── AI Analysis
-  if (pathname === '/api/analyze' && req.method === 'POST') {
-    const bodyStr = await readBody(req);
-    const { corpName, corpCode, reprtCode, year, fsDiv, list, discussionData } = JSON.parse(bodyStr);
-
-    // 현금흐름표(CF)는 요약본(list)에 없음 → 분석 시점에만 전체계정 API로 별도 조회. api/index.js와 동일.
-    let cfItems = [];
-    if (corpCode) {
-      try {
-        cfItems = await fetchCashFlow(
-          { crtfc_key: DART_API_KEY, corp_code: corpCode, bsns_year: String(year), reprt_code: reprtCode || '11011' },
-          fsDiv
-        );
-      } catch (e) { console.error('CF 조회 실패(분석 계속):', e.message); }
-    }
-    const prompt = buildFinancialPrompt(corpName, parseInt(year), fsDiv, list, discussionData, cfItems);
-    if (!prompt) {
-      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: '분석할 데이터가 없습니다' }));
-      return;
-    }
-
-    const geminiRes = await callGemini(GEMINI_MODEL, prompt);
-
-    if (geminiRes.error) {
-      throw new Error(geminiRes.error.message || 'Gemini API 오류');
-    }
-
-    let analysis = geminiRes.candidates?.[0]?.content?.parts?.[0]?.text
-      || '분석 결과를 가져올 수 없습니다.';
-
-    // 렌더링 불가 제어 문자 제거 (이모지는 유지)
-    analysis = analysis.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\uFFFD]/g, '');
-
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ analysis, model: GEMINI_MODEL }));
-    return;
+  // ── 모든 /api/* 는 api/index.js 핸들러에 위임 (백엔드 단일 소스)
+  if (pathname.startsWith('/api/')) {
+    return apiHandler(req, res);
   }
 
   // ── Static files
