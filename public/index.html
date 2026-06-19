@@ -944,6 +944,7 @@
           <button class="fmode active" data-fmode="quarter" onclick="setFinMode('quarter')">분기</button>
           <button class="fmode" data-fmode="ttm" onclick="setFinMode('ttm')">4분기누적(TTM)</button>
           <button class="fmode" data-fmode="cumulative" onclick="setFinMode('cumulative')">누적</button>
+          <span id="fin-mode-help" style="font-size:12px;color:var(--text-muted);margin-left:14px;line-height:1.5;"></span>
         </div>
         <div id="fin-loading" style="display:none;padding:40px;text-align:center;color:var(--text-muted);">📡 DART 분기 시계열 불러오는 중…</div>
         <!-- 현금흐름표 서브탭 -->
@@ -2779,13 +2780,27 @@ function switchFinSub(sub) {
   document.querySelectorAll('.fin-sub-content').forEach(c => c.style.display = 'none');
   const el = document.getElementById('fsub-' + sub);
   if (el) el.style.display = '';
+  updateFinModeHelp();
   renderFinCharts();
 }
 
 function setFinMode(mode) {
   finMode = mode;
   document.querySelectorAll('.fmode').forEach(b => b.classList.toggle('active', b.dataset.fmode === mode));
+  updateFinModeHelp();
   renderFinCharts();
+}
+
+// 표시 기준별 안내 문구 — TTM과 누적이 헷갈리기 쉬워 설명 노출
+function updateFinModeHelp() {
+  const el = document.getElementById('fin-mode-help');
+  if (!el) return;
+  const HELP = {
+    quarter:    'ℹ️ 분기: 해당 분기 1개(3개월)만의 값',
+    ttm:        'ℹ️ 4분기누적(TTM): 직전 4개 분기 합 = 항상 최근 12개월. 계절성 제거·연환산 추세 비교용',
+    cumulative: 'ℹ️ 누적(YTD): 그 해 1분기부터 쌓은 값(2Q=상반기…4Q=연간). 매년 1분기에 0으로 리셋',
+  };
+  el.textContent = HELP[finMode] || '';
 }
 
 // 최근 N년 분기 시계열 온디맨드 로드(+캐싱: 같은 종목 재호출 안 함)
