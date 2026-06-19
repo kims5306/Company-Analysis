@@ -93,11 +93,12 @@ function readBody(req) {
 }
 
 // ──── Naver Stock ─────────────────────────────────────────
-function fetchNaverStock(code) {
+function fetchNaverStock(code, periodType) {
+  const pt = ['dayCandle', 'weekCandle', 'monthCandle'].includes(periodType) ? periodType : 'dayCandle';
   return new Promise((resolve, reject) => {
     const options = {
       hostname: 'api.stock.naver.com',
-      path: `/chart/domestic/item/${code}?periodType=dayCandle`,
+      path: `/chart/domestic/item/${code}?periodType=${pt}`,
       method: 'GET',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
@@ -834,9 +835,9 @@ module.exports = async (req, res) => {
 
     // ── 주식 차트
     if (pathname === '/api/stock-chart') {
-      const { code } = query;
+      const { code, periodType } = query;
       if (!code) { res.writeHead(400); res.end(JSON.stringify({ error: 'code required' })); return; }
-      const data = await fetchNaverStock(code);
+      const data = await fetchNaverStock(code, periodType);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify(data));
       return;

@@ -3253,13 +3253,17 @@ async function loadBizSummary() {
 // ════════════ 투자지표 탭 ════════════
 let valLoadedFor = null;
 let valExtra = null;
-// 분기말 종가 매핑: stockData(네이버 일봉, localDate=YYYYMMDD)에서 분기말일 이하 마지막 거래일 종가
+let valPriceData = [];   // 투자지표용 네이버 월봉(분기말 종가 매핑) — 일봉과 별개
+let valPriceFor = null;  // valPriceData를 로드한 corp_code
+// 분기말 종가 매핑: 월봉(valPriceData) 우선, 없으면 일봉(stockData) 폴백.
+// localDate=YYYYMMDD에서 분기말일 이하 마지막 거래일 종가를 취함.
 function quarterEndPrice(year, q) {
-  if (!Array.isArray(stockData) || !stockData.length) return null;
+  const src = (Array.isArray(valPriceData) && valPriceData.length) ? valPriceData : stockData;
+  if (!Array.isArray(src) || !src.length) return null;
   const endMD = { '1Q': '0331', '2Q': '0630', '3Q': '0930', '4Q': '1231' }[q];
   const target = `${year}${endMD}`;
   let best = null;
-  for (const d of stockData) {
+  for (const d of src) {
     const ld = String(d.localDate || '').replace(/-/g, '');
     if (!ld) continue;
     if (ld <= target) best = d.closePrice;
@@ -3283,9 +3287,15 @@ async function loadValuation() {
     // 2) 주식수·배당
     const rv = await fetch(`/api/valuation-extra?corp_code=${selectedCorp.corp_code}&years=4`);
     valExtra = await rv.json();
-    // 3) 주가(네이버 일봉) — 없으면 로드. 응답 키 priceInfos
-    if (!Array.isArray(stockData) || !stockData.length) {
-      try { const rs = await fetch(`/api/stock-chart?code=${selectedCorp.stock_code}`); const j = await rs.json(); stockData = j.priceInfos || j.infos || (Array.isArray(j) ? j : []); } catch (e) {}
+    // 3) 주가(네이버 월봉) — 분기말 종가 매핑용. 일봉(dayCandle)은 최근 ~110일만 줘서
+    //    과거 분기말 종가가 비므로, 투자지표 탭은 monthCandle(약 9년치)을 별도 로드한다.
+    if (!Array.isArray(valPriceData) || !valPriceData.length || valPriceFor !== selectedCorp.corp_code) {
+      try {
+        const rs = await fetch(`/api/stock-chart?code=${selectedCorp.stock_code}&periodType=monthCandle`);
+        const j = await rs.json();
+        valPriceData = j.priceInfos || j.infos || (Array.isArray(j) ? j : []);
+        valPriceFor = selectedCorp.corp_code;
+      } catch (e) { valPriceData = []; }
     }
     valLoadedFor = selectedCorp.corp_code;
   } catch (e) {
