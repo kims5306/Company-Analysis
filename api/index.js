@@ -276,23 +276,29 @@ async function fetchFinancialSeries(corpCode, years, fsDiv) {
   const CF_ACCTS = ['영업활동현금흐름','투자활동현금흐름','재무활동현금흐름','유형자산의취득','유형자산의처분','감가상각비'];
 
   // 보고서별 원시 수집: raw[y][q] = {bs:{acct:val}, is:{acct:{amt,add}}, cf:{acct:val}}
+  // 🔴 병렬화: Vercel(미국)→DART(한국) 왕복 ~4.7s/건 × 16건 순차 = 75s+ → 60s maxDuration 초과.
+  // Promise.all로 동시 호출해 최장 1건(~8s) 수준으로 단축(years=4도 60s 안). 로직 동일.
   const raw = {};
+  for (let y = startY; y <= curY; y++) raw[y] = {};
+  const jobs = [];
   for (let y = startY; y <= curY; y++) {
-    raw[y] = {};
     for (const [q, rc] of REPRT) {
-      let d;
-      try { d = await fetchDartAPI({ crtfc_key: DART_API_KEY, corp_code: corpCode, bsns_year: String(y), reprt_code: rc, fs_div: fs }, 'fnlttSinglAcntAll'); }
-      catch (e) { d = null; }
-      if (!d || d.status !== '000' || !Array.isArray(d.list)) { raw[y][q] = null; continue; }
-      const bs = {}; BS_ACCTS.forEach(a => { bs[a] = pickField(d.list, 'BS', a).amt; });
-      const is = {}; IS_ACCTS.forEach(a => { is[a] = pickField(d.list, 'IS', a); });   // {amt,add}
-      // 순이익 자동탐색(계정명 변형: 당기/분기/반기순이익 ± (손실), 법인세·주당·계속영업 제외)
-      const niHit = d.list.find(it => it.sj_div === 'IS' && /(당기|분기|반기)순이익/.test(normNm(it.account_nm)) && !/주당|법인세|계속영업|중단/.test(normNm(it.account_nm)));
-      is._ni = niHit ? { amt: toNum(niHit.thstrm_amount), add: toNum(niHit.thstrm_add_amount) } : { amt: null, add: null };
-      const cf = {}; CF_ACCTS.forEach(a => { cf[a] = pickField(d.list, 'CF', a).amt; });
-      raw[y][q] = { bs, is, cf };
+      jobs.push((async () => {
+        let d;
+        try { d = await fetchDartAPI({ crtfc_key: DART_API_KEY, corp_code: corpCode, bsns_year: String(y), reprt_code: rc, fs_div: fs }, 'fnlttSinglAcntAll'); }
+        catch (e) { d = null; }
+        if (!d || d.status !== '000' || !Array.isArray(d.list)) { raw[y][q] = null; return; }
+        const bs = {}; BS_ACCTS.forEach(a => { bs[a] = pickField(d.list, 'BS', a).amt; });
+        const is = {}; IS_ACCTS.forEach(a => { is[a] = pickField(d.list, 'IS', a); });   // {amt,add}
+        // 순이익 자동탐색(계정명 변형: 당기/분기/반기순이익 ± (손실), 법인세·주당·계속영업 제외)
+        const niHit = d.list.find(it => it.sj_div === 'IS' && /(당기|분기|반기)순이익/.test(normNm(it.account_nm)) && !/주당|법인세|계속영업|중단/.test(normNm(it.account_nm)));
+        is._ni = niHit ? { amt: toNum(niHit.thstrm_amount), add: toNum(niHit.thstrm_add_amount) } : { amt: null, add: null };
+        const cf = {}; CF_ACCTS.forEach(a => { cf[a] = pickField(d.list, 'CF', a).amt; });
+        raw[y][q] = { bs, is, cf };
+      })());
     }
   }
+  await Promise.all(jobs);
 
   const ORDER = ['1Q', '2Q', '3Q', '4Q'];
   const points = [];
