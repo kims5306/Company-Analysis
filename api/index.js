@@ -894,10 +894,11 @@ module.exports = async (req, res) => {
     if (pathname === '/api/employees') {
       const { corp_code, year } = query;
       if (!corp_code) { res.writeHead(400); res.end(JSON.stringify({ status: 'ERR', message: 'corp_code 필수' })); return; }
-      const cacheKey = `emp|${corp_code}`;
+      const empY = parseInt(year) || new Date().getFullYear();
+      const cacheKey = `emp|${corp_code}|${empY}`;   // 🔴 연도별 캐시 — 연도 누락 시 첫 호출 결과가 모든 해에 재사용되던 버그 수정
       const hit = genGet(employeesCache, cacheKey);
       if (hit) { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ...hit, cached: true })); return; }
-      const data = await fetchEmployees(corp_code, parseInt(year) || null);
+      const data = await fetchEmployees(corp_code, empY);
       genSet(employeesCache, cacheKey, data);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ ...data, cached: false }));

@@ -1472,6 +1472,8 @@ async function fetchAndRender() {
       try {
         if (activeDetailTab === 'finance' && typeof renderFinCharts === 'function') renderFinCharts();
         else if (activeDetailTab === 'valuation' && typeof renderValuation === 'function' && seriesData) renderValuation();
+        // 사업정보(직원현황)는 선택 연도의 사업보고서 기준 — 연도 바뀌면 그 해로 재로드.
+        else if (activeDetailTab === 'business' && typeof loadBusiness === 'function') loadBusiness();
       } catch (e) { console.warn('세부탭 갱신 실패:', e.message); }
     }
   } catch (err) {
@@ -3253,14 +3255,18 @@ function renderCFFcf() {
 let bizLoadedFor = null;
 async function loadBusiness() {
   if (!selectedCorp) return;
-  if (bizLoadedFor === selectedCorp.corp_code) return;
+  // 🔴 상단에서 선택한 연도 기준으로 직원현황 로드 — 연도 바뀌면 그 해 사업보고서로 갱신.
+  //    캐시 가드를 corp+year 단위로 둬 분기만 바뀌어도(같은 해) 재호출 안 함.
+  const selYear = parseInt(document.getElementById('an-year').value, 10) || new Date().getFullYear();
+  const bizKey = `${selectedCorp.corp_code}|${selYear}`;
+  if (bizLoadedFor === bizKey) return;
   document.getElementById('biz-loading').style.display = '';
   document.getElementById('biz-content').style.display = 'none';
   try {
-    const r = await fetch(`/api/employees?corp_code=${selectedCorp.corp_code}`);
+    const r = await fetch(`/api/employees?corp_code=${selectedCorp.corp_code}&year=${selYear}`);
     const emp = await r.json();
     renderEmployees(emp);
-    bizLoadedFor = selectedCorp.corp_code;
+    bizLoadedFor = bizKey;
     document.getElementById('biz-ai').innerHTML = '';
     document.getElementById('biz-ai-btn').style.display = '';
   } catch (e) {
