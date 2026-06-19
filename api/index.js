@@ -4,6 +4,7 @@ const https = require('https');
 const fs    = require('fs');
 const path  = require('path');
 const url   = require('url');
+const zlib  = require('zlib');
 
 // API 키는 환경변수에서만 로드 (Vercel 환경변수 또는 로컬 .env)
 const DART_API_KEY = process.env.DART_API_KEY || '';
@@ -271,7 +272,7 @@ async function fetchFinancialSeries(corpCode, years, fsDiv) {
   const curY = now.getFullYear();
   const startY = curY - (years - 1);
   const BS_ACCTS = ['자산총계','유동자산','비유동자산','부채총계','유동부채','비유동부채','자본총계','자본금','이익잉여금','유형자산','매출채권','재고자산','매입채무'];
-  const IS_ACCTS = ['매출액','매출원가','매출총이익','영업이익','당기순이익(손실)','당기순이익','법인세비용차감전순이익','판매비와관리비'];
+  const IS_ACCTS = ['매출액','매출원가','매출총이익','영업이익','당기순이익(손실)','당기순이익','분기순이익(손실)','반기순이익(손실)','반기순이익','분기순이익','법인세비용차감전순이익','판매비와관리비'];
   const CF_ACCTS = ['영업활동현금흐름','투자활동현금흐름','재무활동현금흐름','유형자산의취득','유형자산의처분','감가상각비'];
 
   // 보고서별 원시 수집: raw[y][q] = {bs:{acct:val}, is:{acct:{amt,add}}, cf:{acct:val}}
@@ -285,6 +286,9 @@ async function fetchFinancialSeries(corpCode, years, fsDiv) {
       if (!d || d.status !== '000' || !Array.isArray(d.list)) { raw[y][q] = null; continue; }
       const bs = {}; BS_ACCTS.forEach(a => { bs[a] = pickField(d.list, 'BS', a).amt; });
       const is = {}; IS_ACCTS.forEach(a => { is[a] = pickField(d.list, 'IS', a); });   // {amt,add}
+      // 순이익 자동탐색(계정명 변형: 당기/분기/반기순이익 ± (손실), 법인세·주당·계속영업 제외)
+      const niHit = d.list.find(it => it.sj_div === 'IS' && /(당기|분기|반기)순이익/.test(normNm(it.account_nm)) && !/주당|법인세|계속영업|중단/.test(normNm(it.account_nm)));
+      is._ni = niHit ? { amt: toNum(niHit.thstrm_amount), add: toNum(niHit.thstrm_add_amount) } : { amt: null, add: null };
       const cf = {}; CF_ACCTS.forEach(a => { cf[a] = pickField(d.list, 'CF', a).amt; });
       raw[y][q] = { bs, is, cf };
     }
@@ -304,7 +308,8 @@ async function fetchFinancialSeries(corpCode, years, fsDiv) {
       // BS = 시점값
       BS_ACCTS.forEach(a => { pt.bs[a] = snap.bs ? snap.bs[a] : null; });
       // IS = 분기(amt)·누적(add). 4Q는 add없음 → 누적=amt(연간), 분기=연간−3Q누적
-      IS_ACCTS.forEach(a => {
+      // _ni(순이익 자동탐색값)도 동일 차분 로직 적용
+      [...IS_ACCTS, '_ni'].forEach(a => {
         const cur = snap.is ? snap.is[a] : null;
         if (!cur) { pt.isQ[a] = null; pt.isC[a] = null; return; }
         // 누적
@@ -331,6 +336,157 @@ async function fetchFinancialSeries(corpCode, years, fsDiv) {
     }
   }
   return { fsDiv: fs, years, points };
+}
+
+// ──── 밸류에이션 보조: 연도별 상장주식수 + 배당 (PER/PBR/EPS/DPS용) ────
+// 주식수·배당은 사업보고서(연 1회)만 → 연도별 수집. 주가는 프론트가 네이버 일봉에서 매핑(여기선 미포함).
+const DART_GENERIC_TTL = 12 * 3600 * 1000;
+function genGet(cache, key) {
+  const e = cache.get(key);
+  if (!e) return null;
+  if (Date.now() - e.ts > DART_GENERIC_TTL) { cache.delete(key); return null; }
+  return e.value;
+}
+function genSet(cache, key, value, max = 100) {
+  if (cache.size >= max) cache.delete(cache.keys().next().value);
+  cache.set(key, { ts: Date.now(), value });
+}
+const valuationCache = new Map();
+const employeesCache = new Map();
+
+async function dartJson(ep, params) {
+  const qs = Object.entries(params).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+  return dartRequest({
+    hostname: 'opendart.fss.or.kr',
+    path: `/api/${ep}.json?${qs}`,
+    method: 'GET',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/json', 'Accept-Language': 'ko-KR,ko;q=0.9', 'Referer': 'https://opendart.fss.or.kr/',
+    },
+  });
+}
+
+// 연도별 상장주식수(보통주 발행총수) + 배당(주당배당·순이익·배당성향)
+async function fetchValuationExtra(corpCode, years) {
+  const curY = new Date().getFullYear();
+  const startY = curY - (years - 1);
+  const byYear = {};
+  for (let y = startY; y <= curY; y++) {
+    const rec = { shares: null, eps: null, dps: null, payout: null, divYield: null, netIncome: null };
+    // 주식총수 — 보통주 발행총수
+    try {
+      const s = await dartJson('stockTotqySttus', { crtfc_key: DART_API_KEY, corp_code: corpCode, bsns_year: String(y), reprt_code: '11011' });
+      if (s.status === '000' && Array.isArray(s.list)) {
+        const ord = s.list.find(r => (r.se || '').includes('보통주'));
+        if (ord) rec.shares = toNum(ord.istc_totqy);
+      }
+    } catch (e) {}
+    // 배당 — alotMatter
+    try {
+      const d = await dartJson('alotMatter', { crtfc_key: DART_API_KEY, corp_code: corpCode, bsns_year: String(y), reprt_code: '11011' });
+      if (d.status === '000' && Array.isArray(d.list)) {
+        const pick = (kw) => { const r = d.list.find(x => (x.se || '').includes(kw)); return r ? toNum(r.thstrm) : null; };
+        rec.eps = pick('주당순이익');                 // (연결)주당순이익(원)
+        rec.netIncome = pick('당기순이익');            // 백만원
+        rec.payout = pick('현금배당성향');             // %
+        rec.divYield = pick('현금배당수익률');         // %
+        // DPS = 주당 현금배당금(원). 배당총액/주식수로도 가능하나 직접 항목 우선
+        const dpsRow = d.list.find(x => (x.se || '').includes('주당') && (x.se || '').includes('현금배당'));
+        rec.dps = dpsRow ? toNum(dpsRow.thstrm) : null;
+        rec.cashDivTotal = pick('현금배당금총액');     // 백만원
+      }
+    } catch (e) {}
+    byYear[y] = rec;
+  }
+  return { years, byYear };
+}
+
+// 직원현황 — 최신 사업보고서 부문×성별 인원/근속/급여
+async function fetchEmployees(corpCode, year) {
+  const y = year || new Date().getFullYear();
+  // 최신 연도부터 역순으로 데이터 있는 해 찾기(당해 사업보고서 아직 없을 수 있음)
+  for (let yy = y; yy >= y - 2; yy--) {
+    try {
+      const d = await dartJson('empSttus', { crtfc_key: DART_API_KEY, corp_code: corpCode, bsns_year: String(yy), reprt_code: '11011' });
+      if (d.status === '000' && Array.isArray(d.list) && d.list.length) {
+        const rows = d.list.map(r => ({
+          division: r.fo_bbm || '', sex: r.sexdstn || '',
+          regular: toNum(r.rgllbr_co), contract: toNum(r.cnttk_co), total: toNum(r.sm),
+          avgTenure: toNum(r.avrg_cnwk_sdytrn), avgSalary: toNum(r.jan_salary_am),
+        }));
+        return { year: yy, rows };
+      }
+    } catch (e) {}
+  }
+  return { year: y, rows: [] };
+}
+
+// ──── AI 사업요약: 사업보고서 원문에서 '사업의 개요' 추출 → Gemini 요약 ────
+const bizSummaryCache = new Map();
+// 바이너리 GET (zip)
+function httpGetBuffer(hostname, pathStr) {
+  return new Promise((resolve, reject) => {
+    const req = https.request({ hostname, path: pathStr, method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://opendart.fss.or.kr/' } }, (res) => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+    req.on('error', reject);
+    req.setTimeout(45000, () => { req.destroy(); reject(new Error('원문 다운로드 시간 초과')); });
+    req.end();
+  });
+}
+// 최소 zip 파서: 로컬 헤더 순회, deflate(8)/store(0) 첫 .xml 엔트리 추출
+function unzipFirstXml(buf) {
+  let off = 0;
+  while (off + 30 <= buf.length) {
+    if (buf.readUInt32LE(off) !== 0x04034b50) break;
+    const method = buf.readUInt16LE(off + 8);
+    const compSize = buf.readUInt32LE(off + 18);
+    const nameLen = buf.readUInt16LE(off + 26);
+    const extraLen = buf.readUInt16LE(off + 28);
+    const name = buf.slice(off + 30, off + 30 + nameLen).toString('utf8');
+    const dataStart = off + 30 + nameLen + extraLen;
+    const comp = buf.slice(dataStart, dataStart + compSize);
+    if (/\.xml$/i.test(name)) {
+      try {
+        const out = method === 8 ? zlib.inflateRawSync(comp) : comp;
+        return out.toString('utf8');
+      } catch (e) { /* 다음 엔트리 */ }
+    }
+    off = dataStart + compSize;
+  }
+  return null;
+}
+async function fetchBusinessSummary(corpName, corpCode) {
+  // 1) 최신 사업보고서 rcept_no
+  const cury = new Date().getFullYear();
+  let rcept = null;
+  const listing = await dartJson('list', { crtfc_key: DART_API_KEY, corp_code: corpCode, bgn_de: `${cury - 2}0101`, pblntf_ty: 'A', page_count: '30' });
+  if (listing.status === '000' && Array.isArray(listing.list)) {
+    const biz = listing.list.find(r => /사업보고서/.test(r.report_nm || ''));
+    if (biz) rcept = biz.rcept_no;
+  }
+  if (!rcept) throw new Error('사업보고서를 찾을 수 없습니다');
+  // 2) 원문 zip → xml
+  const zipBuf = await httpGetBuffer('opendart.fss.or.kr', `/api/document.xml?crtfc_key=${DART_API_KEY}&rcept_no=${rcept}`);
+  const xml = unzipFirstXml(zipBuf);
+  if (!xml) throw new Error('원문 압축 해제 실패');
+  // 3) 평문화 + '사업의 개요' 섹션 발췌(최대 4500자)
+  let txt = xml.replace(/<[^>]+>/g, ' ').replace(/&[a-zA-Z#0-9]+;/g, ' ').replace(/\s+/g, ' ').trim();
+  let i = txt.indexOf('사업의 개요');
+  if (i < 0) i = txt.indexOf('사업의 내용');
+  const section = i >= 0 ? txt.slice(i, i + 4500) : txt.slice(0, 4500);
+  // 4) Gemini 요약
+  const prompt = `당신은 친절한 기업분석 선생님입니다. 아래는 ${corpName}의 사업보고서 '사업의 개요' 원문입니다.\n` +
+    `일반 투자자가 이해하기 쉽게 다음을 한국어로 정리해주세요(표 없이 서술형, 마크다운 소제목 사용):\n` +
+    `1) 이 회사가 무엇을 하는지 핵심 사업 한 문단\n2) 사업부문(세그먼트) 구분과 각 부문이 뭘 만들고 파는지\n3) 매출 비중이 큰 부문/제품(원문에 수치 있으면 인용)\n4) 한 줄 핵심 요약\n\n원문:\n${section}`;
+  const geminiRes = await callGemini(GEMINI_MODEL, prompt);
+  if (geminiRes.error) throw new Error(geminiRes.error.message || 'Gemini 오류');
+  let out = geminiRes.candidates?.[0]?.content?.parts?.[0]?.text || '요약 생성 실패';
+  out = out.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\uFFFD]/g, '');
+  return { summary: out, rcept_no: rcept };
 }
 
 function fetchDartList(params) {
@@ -602,6 +758,55 @@ module.exports = async (req, res) => {
       seriesSet(cacheKey, data);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ ...data, cached: false }));
+      return;
+    }
+
+    // ── 밸류에이션 보조(주식수+배당) — 투자지표 탭 PER/PBR/EPS/DPS용
+    if (pathname === '/api/valuation-extra') {
+      const { corp_code, years } = query;
+      if (!corp_code) { res.writeHead(400); res.end(JSON.stringify({ status: 'ERR', message: 'corp_code 필수' })); return; }
+      const yN = Math.min(Math.max(parseInt(years) || 4, 1), 8);
+      const cacheKey = `val|${corp_code}|${yN}`;
+      const hit = genGet(valuationCache, cacheKey);
+      if (hit) { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ...hit, cached: true })); return; }
+      const data = await fetchValuationExtra(corp_code, yN);
+      genSet(valuationCache, cacheKey, data);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ...data, cached: false }));
+      return;
+    }
+
+    // ── 직원현황 — 사업정보 탭
+    if (pathname === '/api/employees') {
+      const { corp_code, year } = query;
+      if (!corp_code) { res.writeHead(400); res.end(JSON.stringify({ status: 'ERR', message: 'corp_code 필수' })); return; }
+      const cacheKey = `emp|${corp_code}`;
+      const hit = genGet(employeesCache, cacheKey);
+      if (hit) { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ...hit, cached: true })); return; }
+      const data = await fetchEmployees(corp_code, parseInt(year) || null);
+      genSet(employeesCache, cacheKey, data);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ...data, cached: false }));
+      return;
+    }
+
+    // ── AI 사업요약(사업보고서 원문 → Gemini) — 온디맨드(버튼), 캐싱
+    if (pathname === '/api/business-summary' && req.method === 'POST') {
+      const bodyStr = await readBody(req);
+      const { corpName, corpCode } = JSON.parse(bodyStr || '{}');
+      if (!corpCode) { res.writeHead(400); res.end(JSON.stringify({ error: 'corpCode 필수' })); return; }
+      const cacheKey = `biz|${corpCode}`;
+      const hit = genGet(bizSummaryCache, cacheKey);
+      if (hit) { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ ...hit, cached: true })); return; }
+      try {
+        const data = await fetchBusinessSummary(corpName || '', corpCode);
+        genSet(bizSummaryCache, cacheKey, data);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ...data, cached: false }));
+      } catch (e) {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
       return;
     }
 

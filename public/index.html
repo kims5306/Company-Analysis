@@ -942,6 +942,7 @@
         <div class="fin-mode-toggle" id="fin-mode-toggle">
           <span style="font-size:13px;color:var(--text-muted);margin-right:8px;">표시 기준:</span>
           <button class="fmode active" data-fmode="quarter" onclick="setFinMode('quarter')">분기</button>
+          <button class="fmode" data-fmode="ttm" onclick="setFinMode('ttm')">4분기누적(TTM)</button>
           <button class="fmode" data-fmode="cumulative" onclick="setFinMode('cumulative')">누적</button>
         </div>
         <div id="fin-loading" style="display:none;padding:40px;text-align:center;color:var(--text-muted);">📡 DART 분기 시계열 불러오는 중…</div>
@@ -975,11 +976,37 @@
       </div>
       <!-- 사업정보 탭 -->
       <div class="detail-pane" id="pane-business" style="display:none;">
-        <div style="padding:30px;text-align:center;color:var(--text-muted);">사업정보 탭(직원현황·AI 사업요약)은 Phase 2에서 채워집니다.</div>
+        <div id="biz-loading" style="display:none;padding:40px;text-align:center;color:var(--text-muted);">📡 DART 직원현황·사업개요 불러오는 중…</div>
+        <div id="biz-content" style="display:none;">
+          <div class="chart-card">
+            <div class="chart-title">직원현황 (사업부문별 인원 · <span id="emp-year"></span> 사업보고서)</div>
+            <div class="chart-sub" id="sub-emp"></div>
+            <div class="chart-outer"><span class="y-lbl">명</span><div class="chart-wrap"><canvas id="empChart"></canvas></div></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">직원 상세 (정규/계약·평균근속·1인평균급여)</div>
+            <div id="emp-table" style="overflow-x:auto;"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">🤖 AI 사업요약 (사업의 내용 · 부문별 매출구조)</div>
+            <div class="chart-sub">DART 사업보고서 원문 기반 · 표가 아닌 서술형 요약</div>
+            <div id="biz-ai" style="padding:8px 4px;line-height:1.7;color:var(--text);"></div>
+            <button id="biz-ai-btn" class="fmode" style="margin-top:8px;" onclick="loadBizSummary()">📊 AI 사업요약 생성</button>
+          </div>
+        </div>
       </div>
       <!-- 투자지표 탭 -->
       <div class="detail-pane" id="pane-valuation" style="display:none;">
-        <div style="padding:30px;text-align:center;color:var(--text-muted);">투자지표 탭(ROE 듀퐁·PER/PBR 밴드 등)은 Phase 3에서 채워집니다.</div>
+        <div id="val-loading" style="display:none;padding:40px;text-align:center;color:var(--text-muted);">📡 밸류에이션 데이터(주식수·배당·주가) 불러오는 중…</div>
+        <div id="val-content" style="display:none;">
+          <div class="chart-card"><div class="chart-title">ROE 듀퐁분석 (ROE = 순이익률 × 총자산회전율 × 레버리지)</div><div class="chart-sub" id="sub-val-roe"></div><div class="chart-outer"><span class="y-lbl">%</span><div class="chart-wrap"><canvas id="valRoeChart"></canvas></div><span class="y-lbl">×</span></div></div>
+          <div class="chart-card"><div class="chart-title">PER 밴드 (주가 ÷ EPS, 우축: 수정주가)</div><div class="chart-sub" id="sub-val-per"></div><div class="chart-outer"><span class="y-lbl">배</span><div class="chart-wrap"><canvas id="valPerChart"></canvas></div><span class="y-lbl">원</span></div></div>
+          <div class="chart-card"><div class="chart-title">PBR 밴드 (주가 ÷ BPS, 우축: 수정주가)</div><div class="chart-sub" id="sub-val-pbr"></div><div class="chart-outer"><span class="y-lbl">배</span><div class="chart-wrap"><canvas id="valPbrChart"></canvas></div><span class="y-lbl">원</span></div></div>
+          <div class="chart-card"><div class="chart-title">BPS 주당순자산 (우축: 수정주가)</div><div class="chart-sub" id="sub-val-bps"></div><div class="chart-outer"><span class="y-lbl">원</span><div class="chart-wrap"><canvas id="valBpsChart"></canvas></div><span class="y-lbl">원</span></div></div>
+          <div class="chart-card"><div class="chart-title">SPS · OPS 주당매출·주당영업이익 (우축: 수정주가)</div><div class="chart-sub" id="sub-val-sps"></div><div class="chart-outer"><span class="y-lbl">원</span><div class="chart-wrap"><canvas id="valSpsChart"></canvas></div><span class="y-lbl">원</span></div></div>
+          <div class="chart-card"><div class="chart-title">OCFPS · FCFPS 주당영업·잉여현금흐름 (우축: 수정주가)</div><div class="chart-sub" id="sub-val-ocf"></div><div class="chart-outer"><span class="y-lbl">원</span><div class="chart-wrap"><canvas id="valOcfChart"></canvas></div><span class="y-lbl">원</span></div></div>
+          <div class="chart-card"><div class="chart-title">EPS · DPS 주당순이익·주당배당금 (우축: 수정주가)</div><div class="chart-sub" id="sub-val-eps"></div><div class="chart-outer"><span class="y-lbl">원</span><div class="chart-wrap"><canvas id="valEpsChart"></canvas></div><span class="y-lbl">원</span></div></div>
+        </div>
       </div>
     </div>
 
@@ -2707,6 +2734,8 @@ function switchDetailTab(tab) {
   const pane = document.getElementById('pane-' + tab);
   if (pane) pane.style.display = '';
   if (tab === 'finance') { switchFinSub(finSub); loadFinanceSeries(); }
+  if (tab === 'business') loadBusiness();
+  if (tab === 'valuation') loadValuation();
 }
 
 function switchFinSub(sub) {
@@ -2734,6 +2763,7 @@ async function loadFinanceSeries() {
   try {
     const r = await fetch(`/api/financial-series?corp_code=${selectedCorp.corp_code}&years=4&fs_div=${fsDiv}`);
     seriesData = await r.json();
+    computeTTM();
     seriesLoadedFor = selectedCorp.corp_code;
   } catch (e) {
     document.getElementById('fin-loading').textContent = '⚠️ 시계열 로드 실패: ' + e.message;
@@ -2764,16 +2794,40 @@ const FIN_COLORS = {
   yellow:'#ffd54f', purple:'#ba68c8', cyan:'#4dd0e1', red:'#ef5350', gray:'#90a4ae'
 };
 function bsVal(p, acct) { const v = p.bs && p.bs[acct]; return v == null ? null : v / EOK; }
-function isVal(p, acct) { const key = finMode === 'cumulative' ? 'isC' : 'isQ'; const v = p[key] && p[key][acct]; return v == null ? null : v / EOK; }
-function isValRaw(p, acct) { const key = finMode === 'cumulative' ? 'isC' : 'isQ'; const v = p[key] && p[key][acct]; return v == null ? null : v; }
-function netIncRaw(p) { return isValRaw(p, '당기순이익(손실)') != null ? isValRaw(p, '당기순이익(손실)') : isValRaw(p, '당기순이익'); }
+function isVal(p, acct) { const key = finMode === 'cumulative' ? 'isC' : (finMode === 'ttm' ? 'isT' : 'isQ'); const v = p[key] && p[key][acct]; return v == null ? null : v / EOK; }
+function isValRaw(p, acct) { const key = finMode === 'cumulative' ? 'isC' : (finMode === 'ttm' ? 'isT' : 'isQ'); const v = p[key] && p[key][acct]; return v == null ? null : v; }
+function cfVal(p, acct) { const key = finMode === 'cumulative' ? 'cfC' : (finMode === 'ttm' ? 'cfT' : 'cfQ'); const v = p[key] && p[key][acct]; return v == null ? null : v / EOK; }
+function cfValRaw(p, acct) { const key = finMode === 'cumulative' ? 'cfC' : (finMode === 'ttm' ? 'cfT' : 'cfQ'); const v = p[key] && p[key][acct]; return v == null ? null : v; }
+function netIncRaw(p) { const key = finMode === 'cumulative' ? 'isC' : (finMode === 'ttm' ? 'isT' : 'isQ'); return pickNetInc(p, key); }
 function netInc(p) { const v = netIncRaw(p); return v == null ? null : v / EOK; }
+// 순이익 통합(계정명 변형 흡수): _ni(computeTTM이 채움) 우선, 없으면 개별 키
+function pickNetInc(p, key) { const v0 = p[key] && p[key]._ni; if (v0 != null) return v0; const ks = ['당기순이익(손실)','분기순이익(손실)','반기순이익(손실)','당기순이익','분기순이익','반기순이익']; for (const k of ks) { const v = p[key] && p[key][k]; if (v != null) return v; } return null; }
 // TTM(최근4분기 합) — 분기단독값 기준. pts 전체에서 idx 위치 기준 4개 합
 function ttmSum(allPts, idx, getter) {
   if (idx < 3) return null;
   let s = 0;
   for (let k = idx - 3; k <= idx; k++) { const v = getter(allPts[k]); if (v == null) return null; s += v; }
   return s;
+}
+// seriesData.points 전체에 isT/cfT(4분기 롤링합) 미리 채움 — 분기단독(isQ/cfQ) 기준
+function computeTTM() {
+  if (!seriesData || !Array.isArray(seriesData.points)) return;
+  const pts = seriesData.points;
+  // 분기별 순이익 통합값 _ni 먼저 채움(계정명 변형 흡수: 당기/분기/반기순이익)
+  const NI_KEYS = ['당기순이익(손실)','분기순이익(손실)','반기순이익(손실)','당기순이익','분기순이익','반기순이익'];
+  pts.forEach(p => {
+    const pick = (g) => { for (const k of NI_KEYS) { const v = p[g] && p[g][k]; if (v != null) return v; } return null; };
+    // 🔴 백엔드(financial-series)가 채운 _ni 우선 보존 — 4Q는 보고서별 계정명 어긋나 NI_KEYS가 전부 null이라 덮어쓰면 7.75조→null 파괴됨. 백엔드 _ni 없을 때만 fallback.
+    if (p.isQ && p.isQ._ni == null) p.isQ._ni = pick('isQ');
+    if (p.isC && p.isC._ni == null) p.isC._ni = pick('isC');
+  });
+  const isKeys = pts[0] && pts[0].isQ ? Object.keys(pts[0].isQ) : [];
+  const cfKeys = pts[0] && pts[0].cfQ ? Object.keys(pts[0].cfQ) : [];
+  pts.forEach((p, i) => {
+    p.isT = {}; p.cfT = {};
+    isKeys.forEach(a => { p.isT[a] = ttmSum(pts, i, x => x.isQ ? x.isQ[a] : null); });
+    cfKeys.forEach(a => { p.cfT[a] = ttmSum(pts, i, x => x.cfQ ? x.cfQ[a] : null); });
+  });
 }
 function finChartBase(extraY) {
   return {
@@ -2972,7 +3026,7 @@ function turnOpts(){ const o=finChartBase(); o.scales.y.ticks.callback=v=>v.toFi
 function renderCFMain() {
   const pts = recentPoints(12);
   if (!pts.length) return;
-  const key = finMode === 'cumulative' ? 'cfC' : 'cfQ';
+  const key = finMode === 'cumulative' ? 'cfC' : (finMode === 'ttm' ? 'cfT' : 'cfQ');
   const labels = pts.map(p => p.label);
   const g = (p, acct) => { const v = p[key] && p[key][acct]; return v == null ? null : v / EOK; };
   const cfo = pts.map(p => g(p, '영업활동현금흐름'));
@@ -2983,8 +3037,9 @@ function renderCFMain() {
 
   const ctx = document.getElementById('cfMainChart').getContext('2d');
   if (detailCharts.cfMain) detailCharts.cfMain.destroy();
+  const modeLbl = finMode === 'cumulative' ? '누적(YTD)' : (finMode === 'ttm' ? '4분기누적(TTM)' : '분기');
   document.getElementById('sub-cf-main').textContent =
-    `${finMode === 'cumulative' ? '누적(YTD)' : '분기'} 기준 · 최근 ${pts.length}개 분기 · 단위 억원 · FCF = 영업CF − CAPEX`;
+    `${modeLbl} 기준 · 최근 ${pts.length}개 분기 · 단위 억원 · FCF = 영업CF − CAPEX`;
   detailCharts.cfMain = new Chart(ctx, {
     data: {
       labels,
@@ -3009,6 +3064,231 @@ function renderCFMain() {
       }
     }
   });
+}
+
+// ════════════ 사업정보 탭 ════════════
+let bizLoadedFor = null;
+async function loadBusiness() {
+  if (!selectedCorp) return;
+  if (bizLoadedFor === selectedCorp.corp_code) return;
+  document.getElementById('biz-loading').style.display = '';
+  document.getElementById('biz-content').style.display = 'none';
+  try {
+    const r = await fetch(`/api/employees?corp_code=${selectedCorp.corp_code}`);
+    const emp = await r.json();
+    renderEmployees(emp);
+    bizLoadedFor = selectedCorp.corp_code;
+    document.getElementById('biz-ai').innerHTML = '';
+    document.getElementById('biz-ai-btn').style.display = '';
+  } catch (e) {
+    document.getElementById('biz-loading').textContent = '⚠️ 직원현황 로드 실패: ' + e.message;
+    return;
+  }
+  document.getElementById('biz-loading').style.display = 'none';
+  document.getElementById('biz-content').style.display = '';
+}
+
+function renderEmployees(emp) {
+  document.getElementById('emp-year').textContent = emp.year ? emp.year + '년' : '';
+  const rows = (emp.rows || []).filter(r => r.division && !/합계|소계|계$/.test(r.division) || r.division === '성별합계');
+  // 부문별(성별합계/소계 제외) 인원 스택: 부문 라벨, 남/여 묶기
+  const segRows = (emp.rows || []).filter(r => r.division && !/합계|소계/.test(r.division));
+  const segs = [...new Set(segRows.map(r => r.division))];
+  const male = segs.map(s => { const r = segRows.find(x => x.division === s && /남/.test(x.sex)); return r ? r.total : null; });
+  const female = segs.map(s => { const r = segRows.find(x => x.division === s && /여/.test(x.sex)); return r ? r.total : null; });
+  document.getElementById('sub-emp').textContent = `${emp.year}년 사업보고서 · 부문×성별 인원`;
+  mkChart('empChart', 'emp', {
+    type: 'bar',
+    data: { labels: segs, datasets: [
+      { label: '남', data: male, backgroundColor: 'rgba(79,127,255,.65)', stack: 'e' },
+      { label: '여', data: female, backgroundColor: 'rgba(255,91,127,.65)', stack: 'e' },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#bbb' } }, datalabels: { display: false },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${(c.parsed.y||0).toLocaleString('ko-KR')}명` } } },
+      scales: { x: { stacked: true, ticks: { color: '#999' }, grid: { color: 'rgba(127,127,127,.08)' } },
+        y: { stacked: true, ticks: { color: '#999', callback: v => v.toLocaleString('ko-KR') }, grid: { color: 'rgba(127,127,127,.08)' } } } }
+  });
+  // 표
+  const fmtN = v => v == null ? '-' : v.toLocaleString('ko-KR');
+  const fmtSal = v => v == null ? '-' : (v / 1e8).toFixed(2) + '억';
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:1px solid #2e3250;color:#9ba;">'
+    + '<th style="text-align:left;padding:6px;">부문</th><th style="padding:6px;">성별</th><th style="padding:6px;">정규직</th><th style="padding:6px;">계약직</th><th style="padding:6px;">합계</th><th style="padding:6px;">평균근속(년)</th><th style="padding:6px;">1인평균급여</th></tr></thead><tbody>';
+  (emp.rows || []).forEach(r => {
+    const isSum = /합계/.test(r.division);
+    html += `<tr style="border-bottom:1px solid #21243300;${isSum ? 'font-weight:600;color:#ffd54f;' : 'color:#cdd;'}">`
+      + `<td style="padding:6px;">${r.division}</td><td style="text-align:center;padding:6px;">${r.sex || '-'}</td>`
+      + `<td style="text-align:right;padding:6px;">${fmtN(r.regular)}</td><td style="text-align:right;padding:6px;">${fmtN(r.contract)}</td>`
+      + `<td style="text-align:right;padding:6px;">${fmtN(r.total)}</td><td style="text-align:right;padding:6px;">${r.avgTenure == null ? '-' : r.avgTenure}</td>`
+      + `<td style="text-align:right;padding:6px;">${fmtSal(r.avgSalary)}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('emp-table').innerHTML = html;
+}
+
+// AI 사업요약 — 기존 /api/analyze 재사용(사업의 내용 텍스트는 백엔드가 사업보고서에서 추출)
+async function loadBizSummary() {
+  if (!selectedCorp) return;
+  const btn = document.getElementById('biz-ai-btn');
+  const out = document.getElementById('biz-ai');
+  btn.disabled = true; btn.textContent = '⏳ 생성 중…';
+  out.innerHTML = '<span style="color:var(--text-muted)">AI가 사업보고서를 읽고 요약 중…</span>';
+  try {
+    const r = await fetch('/api/business-summary', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ corpName: selectedCorp.corp_name, corpCode: selectedCorp.corp_code })
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    out.innerHTML = (d.summary || '요약 없음').replace(/\n/g, '<br>');
+    btn.style.display = 'none';
+  } catch (e) {
+    out.innerHTML = '<span style="color:#ef5350">⚠️ ' + e.message + '</span>';
+    btn.disabled = false; btn.textContent = '📊 다시 시도';
+  }
+}
+
+// ════════════ 투자지표 탭 ════════════
+let valLoadedFor = null;
+let valExtra = null;
+// 분기말 종가 매핑: stockData(네이버 일봉, localDate=YYYYMMDD)에서 분기말일 이하 마지막 거래일 종가
+function quarterEndPrice(year, q) {
+  if (!Array.isArray(stockData) || !stockData.length) return null;
+  const endMD = { '1Q': '0331', '2Q': '0630', '3Q': '0930', '4Q': '1231' }[q];
+  const target = `${year}${endMD}`;
+  let best = null;
+  for (const d of stockData) {
+    const ld = String(d.localDate || '').replace(/-/g, '');
+    if (!ld) continue;
+    if (ld <= target) best = d.closePrice;
+    else break;
+  }
+  return best;
+}
+
+async function loadValuation() {
+  if (!selectedCorp) return;
+  if (valLoadedFor === selectedCorp.corp_code && valExtra) { renderValuation(); return; }
+  document.getElementById('val-loading').style.display = '';
+  document.getElementById('val-content').style.display = 'none';
+  try {
+    // 1) 시계열(재무) — 재무탭과 공유(없으면 로드)
+    if (!seriesData || seriesLoadedFor !== selectedCorp.corp_code) {
+      const fsDiv = (typeof currentFSDiv !== 'undefined' && currentFSDiv) ? currentFSDiv : 'CFS';
+      const r = await fetch(`/api/financial-series?corp_code=${selectedCorp.corp_code}&years=4&fs_div=${fsDiv}`);
+      seriesData = await r.json(); computeTTM(); seriesLoadedFor = selectedCorp.corp_code;
+    }
+    // 2) 주식수·배당
+    const rv = await fetch(`/api/valuation-extra?corp_code=${selectedCorp.corp_code}&years=4`);
+    valExtra = await rv.json();
+    // 3) 주가(네이버 일봉) — 없으면 로드. 응답 키 priceInfos
+    if (!Array.isArray(stockData) || !stockData.length) {
+      try { const rs = await fetch(`/api/stock-chart?code=${selectedCorp.stock_code}`); const j = await rs.json(); stockData = j.priceInfos || j.infos || (Array.isArray(j) ? j : []); } catch (e) {}
+    }
+    valLoadedFor = selectedCorp.corp_code;
+  } catch (e) {
+    document.getElementById('val-loading').textContent = '⚠️ 밸류에이션 로드 실패: ' + e.message;
+    return;
+  }
+  document.getElementById('val-loading').style.display = 'none';
+  document.getElementById('val-content').style.display = '';
+  renderValuation();
+}
+
+// 분기별 상장주식수(연 사업보고서 값을 그 해 분기에 적용, 없으면 직전연도 fallback)
+function sharesFor(year) {
+  if (!valExtra || !valExtra.byYear) return null;
+  for (let y = year; y >= year - 2; y--) { const r = valExtra.byYear[y]; if (r && r.shares) return r.shares; }
+  return null;
+}
+function percentile(arr, p) {
+  const a = arr.filter(v => v != null && isFinite(v)).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const idx = (a.length - 1) * p;
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  return lo === hi ? a[lo] : a[lo] + (a[hi] - a[lo]) * (idx - lo);
+}
+
+function renderValuation() {
+  const pts = recentPoints(12); if (!pts.length) return;
+  const labels = pts.map(p => p.label);
+  const price = pts.map(p => quarterEndPrice(p.year, p.q));
+  // TTM 기반 per-share (분기단독 4분기합) — computeTTM가 isT/cfT 채움
+  const ttmIs = (p, a) => p.isT ? p.isT[a] : null;
+  const ttmCf = (p, a) => p.cfT ? p.cfT[a] : null;
+  const sh = pts.map(p => sharesFor(p.year));
+
+  // ① ROE 듀퐁 (TTM 순이익/자본, 순이익률, 총자산회전율, 레버리지)
+  const roe = pts.map(p => { const ni = pickNetInc(p, 'isT'); const eq = p.bs?.['자본총계']; return (ni != null && eq) ? +(ni / eq * 100).toFixed(2) : null; });
+  const npm = pts.map(p => { const ni = pickNetInc(p, 'isT'); const sa = ttmIs(p, '매출액'); return (ni != null && sa) ? +(ni / sa * 100).toFixed(2) : null; });
+  const ato = pts.map(p => { const sa = ttmIs(p, '매출액'); const ta = p.bs?.['자산총계']; return (sa != null && ta) ? +(sa / ta).toFixed(2) : null; });
+  const lev = pts.map(p => { const ta = p.bs?.['자산총계']; const eq = p.bs?.['자본총계']; return (ta && eq) ? +(ta / eq).toFixed(2) : null; });
+  setTxt('sub-val-roe', 'TTM 기준 · ROE = 순이익률 × 총자산회전율 × 레버리지');
+  mkChart('valRoeChart', 'valRoe', { data: { labels, datasets: [
+    { type: 'bar', label: 'ROE(%)', data: roe, backgroundColor: 'rgba(79,127,255,.55)', order: 3 },
+    { type: 'line', label: '순이익률(%)', data: npm, borderColor: '#ff5b7f', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
+    { type: 'line', label: '총자산회전율(×)', data: ato, yAxisID: 'y1', _x: '회', borderColor: '#ffa726', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
+    { type: 'line', label: '레버리지(×)', data: lev, yAxisID: 'y1', _x: '회', borderColor: '#9ccc65', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
+  ]}, options: finChartBase(Y1_CNT) });
+
+  // per-share 계산
+  const eps = pts.map((p, i) => { const ni = pickNetInc(p, 'isT'); return (ni != null && sh[i]) ? ni / sh[i] : null; });
+  const bps = pts.map((p, i) => { const eq = p.bs?.['자본총계']; return (eq != null && sh[i]) ? eq / sh[i] : null; });
+  const sps = pts.map((p, i) => { const sa = ttmIs(p, '매출액'); return (sa != null && sh[i]) ? sa / sh[i] : null; });
+  const ops = pts.map((p, i) => { const op = ttmIs(p, '영업이익'); return (op != null && sh[i]) ? op / sh[i] : null; });
+  const ocfps = pts.map((p, i) => { const o = ttmCf(p, '영업활동현금흐름'); return (o != null && sh[i]) ? o / sh[i] : null; });
+  const fcfps = pts.map((p, i) => { const o = ttmCf(p, '영업활동현금흐름'); const c = ttmCf(p, '유형자산의취득'); return (o != null && c != null && sh[i]) ? (o - c) / sh[i] : null; });
+  const per = pts.map((p, i) => (price[i] != null && eps[i] && eps[i] > 0) ? +(price[i] / eps[i]).toFixed(1) : null);
+  const pbr = pts.map((p, i) => (price[i] != null && bps[i] && bps[i] > 0) ? +(price[i] / bps[i]).toFixed(2) : null);
+
+  const priceDs = { type: 'line', label: '수정주가(원)', data: price, yAxisID: 'y1', borderColor: '#90a4ae', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 1, borderDash: [4, 3], tension: .2, order: 0 };
+  const bandLines = (vals, color) => { const lo = percentile(vals, .25), mid = percentile(vals, .5), hi = percentile(vals, .75); return [lo, mid, hi].map((b, k) => ({ type: 'line', label: ['하단', '중간', '상단'][k] + '밴드', data: labels.map(() => b), borderColor: color, borderWidth: 1, borderDash: [6, 4], pointRadius: 0, tension: 0, order: 2 })); };
+
+  // ② PER 밴드
+  setTxt('sub-val-per', 'PER = 수정주가 ÷ EPS(TTM) · 밴드 = 과거 분포 25/50/75%');
+  mkChart('valPerChart', 'valPer', { data: { labels, datasets: [
+    { type: 'line', label: 'PER(배)', data: per, borderColor: '#ffa726', backgroundColor: 'rgba(255,167,38,.08)', borderWidth: 2, pointRadius: 2, tension: .25, fill: true, order: 1 },
+    ...bandLines(per, 'rgba(255,167,38,.4)'), priceDs,
+  ]}, options: finChartBase(Y1_NUM) });
+
+  // ③ PBR 밴드
+  setTxt('sub-val-pbr', 'PBR = 수정주가 ÷ BPS · 밴드 = 과거 분포 25/50/75%');
+  mkChart('valPbrChart', 'valPbr', { data: { labels, datasets: [
+    { type: 'line', label: 'PBR(배)', data: pbr, borderColor: '#ff5b7f', backgroundColor: 'rgba(255,91,127,.08)', borderWidth: 2, pointRadius: 2, tension: .25, fill: true, order: 1 },
+    ...bandLines(pbr, 'rgba(255,91,127,.4)'), priceDs,
+  ]}, options: finChartBase(Y1_NUM) });
+
+  // ④ BPS
+  setTxt('sub-val-bps', 'BPS = 자본총계 ÷ 상장주식수 · 우축: 수정주가');
+  mkChart('valBpsChart', 'valBps', { data: { labels, datasets: [
+    { type: 'line', label: 'BPS(원)', data: bps.map(v => v == null ? null : Math.round(v)), borderColor: '#ff5b7f', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
+    priceDs,
+  ]}, options: finChartBase(Y1_NUM) });
+
+  // ⑤ SPS·OPS
+  setTxt('sub-val-sps', 'SPS=주당매출 · OPS=주당영업이익 (TTM) · 우축: 수정주가');
+  mkChart('valSpsChart', 'valSps', { data: { labels, datasets: [
+    { type: 'line', label: 'SPS(원)', data: sps.map(v => v == null ? null : Math.round(v)), borderColor: '#4f7fff', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
+    { type: 'line', label: 'OPS(원)', data: ops.map(v => v == null ? null : Math.round(v)), borderColor: '#ffd54f', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
+    priceDs,
+  ]}, options: finChartBase(Y1_NUM) });
+
+  // ⑥ OCFPS·FCFPS
+  setTxt('sub-val-ocf', 'OCFPS=주당영업현금흐름 · FCFPS=주당잉여현금흐름 (TTM) · 우축: 수정주가');
+  mkChart('valOcfChart', 'valOcf', { data: { labels, datasets: [
+    { type: 'line', label: 'OCFPS(원)', data: ocfps.map(v => v == null ? null : Math.round(v)), borderColor: '#4f7fff', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
+    { type: 'line', label: 'FCFPS(원)', data: fcfps.map(v => v == null ? null : Math.round(v)), borderColor: '#ffd54f', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
+    priceDs,
+  ]}, options: finChartBase(Y1_NUM) });
+
+  // ⑦ EPS·DPS (DPS는 연배당 → 그 해 분기에 동일 적용)
+  const dps = pts.map(p => valExtra?.byYear?.[p.year]?.dps ?? null);
+  setTxt('sub-val-eps', 'EPS=주당순이익(TTM) · DPS=주당배당금(연) · 우축: 수정주가');
+  mkChart('valEpsChart', 'valEps', { data: { labels, datasets: [
+    { type: 'line', label: 'EPS(원)', data: eps.map(v => v == null ? null : Math.round(v)), borderColor: '#ffa726', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: .25, order: 1 },
+    { type: 'line', label: 'DPS(원)', data: dps, borderColor: '#9ccc65', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, stepped: true, order: 1 },
+    priceDs,
+  ]}, options: finChartBase(Y1_NUM) });
 }
 </script>
 <!-- ── Footer ── -->
