@@ -443,47 +443,86 @@ function httpGetBuffer(hostname, pathStr) {
     req.end();
   });
 }
-// 최소 zip 파서: 로컬 헤더 순회, deflate(8)/store(0) 첫 .xml 엔트리 추출
-function unzipFirstXml(buf) {
+// 최소 zip 파서: 로컬 헤더 순회, deflate(8)/store(0) 모든 .xml 엔트리 추출.
+// 🔴 DART document.xml zip은 streaming(데이터 디스크립터) 방식이라 로컬헤더 compSize=0인
+//    경우가 흔함 → comp 슬라이스가 빈 버퍼가 돼 inflate 실패("unexpected end of file").
+//    해결: compSize=0이면 다음 로컬헤더(0x04034b50)/CD(0x02014b50)/디스크립터(0x08074b50)
+//    직전까지를 압축데이터로 보고, inflateRaw가 데이터 디스크립터 꼬리를 무시하게 둔다.
+// 🔴 사업보고서 zip엔 xml 여러개(감사보고서 2개 + 본문 1개) → 첫 엔트리=감사보고서라
+//    '사업의 개요/내용'이 없음. 전부 추출해서 호출부가 본문을 고르게 한다.
+function unzipXmls(buf) {
+  const out = [];
   let off = 0;
   while (off + 30 <= buf.length) {
     if (buf.readUInt32LE(off) !== 0x04034b50) break;
     const method = buf.readUInt16LE(off + 8);
-    const compSize = buf.readUInt32LE(off + 18);
+    let compSize = buf.readUInt32LE(off + 18);
     const nameLen = buf.readUInt16LE(off + 26);
     const extraLen = buf.readUInt16LE(off + 28);
     const name = buf.slice(off + 30, off + 30 + nameLen).toString('utf8');
     const dataStart = off + 30 + nameLen + extraLen;
+    if (compSize === 0) {
+      let scan = dataStart;
+      while (scan + 4 <= buf.length) {
+        const sig = buf.readUInt32LE(scan);
+        if (sig === 0x04034b50 || sig === 0x02014b50 || sig === 0x08074b50) break;
+        scan++;
+      }
+      compSize = scan - dataStart;
+    }
     const comp = buf.slice(dataStart, dataStart + compSize);
     if (/\.xml$/i.test(name)) {
       try {
-        const out = method === 8 ? zlib.inflateRawSync(comp) : comp;
-        return out.toString('utf8');
+        const data = method === 8 ? zlib.inflateRawSync(comp) : comp;
+        if (data && data.length) out.push({ name, xml: data.toString('utf8') });
       } catch (e) { /* 다음 엔트리 */ }
     }
     off = dataStart + compSize;
+    if (off + 4 > buf.length || buf.readUInt32LE(off) !== 0x04034b50) {
+      let scan = dataStart;
+      while (scan + 4 <= buf.length && buf.readUInt32LE(scan) !== 0x04034b50) scan++;
+      if (scan + 4 > buf.length) break;
+      off = scan;
+    }
   }
-  return null;
+  return out;
 }
+// 호환용: 첫 xml만 필요할 때
+function unzipFirstXml(buf) { const a = unzipXmls(buf); return a.length ? a[0].xml : null; }
 async function fetchBusinessSummary(corpName, corpCode) {
-  // 1) 최신 사업보고서 rcept_no
+  // 1) 사업보고서 후보 수집 (최신순). 🔴 [첨부정정]/[기재정정] 정정본은 document.xml 원문이
+  //    없어 DART가 014(파일없음) 반환 → 정본([태그] 없는 것) 우선, 실패 시 다음 후보로 폴백.
   const cury = new Date().getFullYear();
-  let rcept = null;
   const listing = await dartJson('list', { crtfc_key: DART_API_KEY, corp_code: corpCode, bgn_de: `${cury - 2}0101`, pblntf_ty: 'A', page_count: '30' });
-  if (listing.status === '000' && Array.isArray(listing.list)) {
-    const biz = listing.list.find(r => /사업보고서/.test(r.report_nm || ''));
-    if (biz) rcept = biz.rcept_no;
+  if (listing.status !== '000' || !Array.isArray(listing.list)) throw new Error('사업보고서를 찾을 수 없습니다');
+  const all = listing.list.filter(r => /사업보고서/.test(r.report_nm || ''));
+  if (!all.length) throw new Error('사업보고서를 찾을 수 없습니다');
+  // 정본([대괄호] 태그 없음) 먼저, 그다음 정정본 — 둘 다 최신순(리스트가 이미 최신순)
+  const plain = all.filter(r => !/\[.*?\]/.test(r.report_nm || ''));
+  const corrected = all.filter(r => /\[.*?\]/.test(r.report_nm || ''));
+  const candidates = [...plain, ...corrected];
+  // 2) 후보를 순서대로 원문 zip → xml 추출. 사업보고서 zip엔 xml 여러개(감사보고서+본문)라
+  //    '사업의 개요/내용'이 든 본문 xml을 고른다(가장 큰 것 우선). 첫 성공 후보 사용.
+  let section = null, usedRcept = null;
+  for (const c of candidates) {
+    try {
+      const zipBuf = await httpGetBuffer('opendart.fss.or.kr', `/api/document.xml?crtfc_key=${DART_API_KEY}&rcept_no=${c.rcept_no}`);
+      // DART 에러는 ZIP이 아니라 XML(<status>014</status>)로 옴 → ZIP 시그니처 확인
+      if (!zipBuf || zipBuf.length < 4 || zipBuf.readUInt32LE(0) !== 0x04034b50) continue;
+      const xmls = unzipXmls(zipBuf);
+      if (!xmls.length) continue;
+      // 각 xml 평문화 후 '사업의 개요/내용' 포함 여부로 본문 식별. 여러개면 가장 큰 본문.
+      // 🔴 목차에도 '사업의 개요'가 나옴(첫 등장=목차) → lastIndexOf로 실제 본문 섹션을 잡음.
+      let best = null;
+      for (const e of xmls) {
+        const t = e.xml.replace(/<[^>]+>/g, ' ').replace(/&[a-zA-Z#0-9]+;/g, ' ').replace(/\s+/g, ' ').trim();
+        const i = t.lastIndexOf('사업의 개요') >= 0 ? t.lastIndexOf('사업의 개요') : t.lastIndexOf('사업의 내용');
+        if (i >= 0 && (!best || t.length > best.txt.length)) best = { txt: t, i };
+      }
+      if (best) { section = best.txt.slice(best.i, best.i + 4500); usedRcept = c.rcept_no; break; }
+    } catch (e) { /* 다음 후보 */ }
   }
-  if (!rcept) throw new Error('사업보고서를 찾을 수 없습니다');
-  // 2) 원문 zip → xml
-  const zipBuf = await httpGetBuffer('opendart.fss.or.kr', `/api/document.xml?crtfc_key=${DART_API_KEY}&rcept_no=${rcept}`);
-  const xml = unzipFirstXml(zipBuf);
-  if (!xml) throw new Error('원문 압축 해제 실패');
-  // 3) 평문화 + '사업의 개요' 섹션 발췌(최대 4500자)
-  let txt = xml.replace(/<[^>]+>/g, ' ').replace(/&[a-zA-Z#0-9]+;/g, ' ').replace(/\s+/g, ' ').trim();
-  let i = txt.indexOf('사업의 개요');
-  if (i < 0) i = txt.indexOf('사업의 내용');
-  const section = i >= 0 ? txt.slice(i, i + 4500) : txt.slice(0, 4500);
+  if (!section) throw new Error('원문 압축 해제 실패');
   // 4) Gemini 요약
   const prompt = `당신은 친절한 기업분석 선생님입니다. 아래는 ${corpName}의 사업보고서 '사업의 개요' 원문입니다.\n` +
     `일반 투자자가 이해하기 쉽게 다음을 한국어로 정리해주세요(표 없이 서술형, 마크다운 소제목 사용):\n` +
