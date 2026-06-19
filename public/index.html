@@ -957,10 +957,20 @@
           </div>
         </div>
         <div class="fin-sub-content" id="fsub-bs" style="display:none;">
-          <div style="padding:30px;text-align:center;color:var(--text-muted);">재무상태표 차트는 Phase 2에서 채워집니다.</div>
+          <div class="chart-card"><div class="chart-title">재무구조 (자본+부채 = 자산, 우축: 부채비율)</div><div class="chart-sub" id="sub-bs-struct"></div><div class="chart-outer"><span class="y-lbl">억원</span><div class="chart-wrap"><canvas id="bsStructChart"></canvas></div><span class="y-lbl">%</span></div></div>
+          <div class="chart-card"><div class="chart-title">자산현황 (유동/비유동 + 자산총계)</div><div class="chart-sub" id="sub-bs-asset"></div><div class="chart-outer"><span class="y-lbl">억원</span><div class="chart-wrap"><canvas id="bsAssetChart"></canvas></div></div></div>
+          <div class="chart-card"><div class="chart-title">부채현황 (유동/비유동 + 부채총계)</div><div class="chart-sub" id="sub-bs-debt"></div><div class="chart-outer"><span class="y-lbl">억원</span><div class="chart-wrap"><canvas id="bsDebtChart"></canvas></div></div></div>
+          <div class="chart-card"><div class="chart-title">자본현황 (자본금/이익잉여금/기타 + 자본총계)</div><div class="chart-sub" id="sub-bs-equity"></div><div class="chart-outer"><span class="y-lbl">억원</span><div class="chart-wrap"><canvas id="bsEquityChart"></canvas></div></div></div>
+          <div class="chart-card"><div class="chart-title">유형자산 (장부가 + CAPEX, 우축: CAPEX비율)</div><div class="chart-sub" id="sub-bs-ppe"></div><div class="chart-outer"><span class="y-lbl">억원</span><div class="chart-wrap"><canvas id="bsPpeChart"></canvas></div><span class="y-lbl">%</span></div></div>
+          <div class="chart-card"><div class="chart-title">운전자본 (매출채권/재고/매입채무, 우축: 매출)</div><div class="chart-sub" id="sub-bs-wc"></div><div class="chart-outer"><span class="y-lbl">억원</span><div class="chart-wrap"><canvas id="bsWcChart"></canvas></div><span class="y-lbl">억원</span></div></div>
+          <div class="chart-card"><div class="chart-title">회전율 (매출채권/재고/매입채무, 회·TTM)</div><div class="chart-sub" id="sub-bs-turn"></div><div class="chart-outer"><span class="y-lbl">회</span><div class="chart-wrap"><canvas id="bsTurnChart"></canvas></div></div></div>
         </div>
         <div class="fin-sub-content" id="fsub-is" style="display:none;">
-          <div style="padding:30px;text-align:center;color:var(--text-muted);">손익계산서 차트는 Phase 2에서 채워집니다.</div>
+          <div class="chart-card"><div class="chart-title">이익추이 (매출/영업이익/순이익, 우축: 이익률)</div><div class="chart-sub" id="sub-is-profit"></div><div class="chart-outer"><span class="y-lbl">억원</span><div class="chart-wrap"><canvas id="isProfitChart"></canvas></div><span class="y-lbl">%</span></div></div>
+          <div class="chart-card"><div class="chart-title">YoY 성장률 (매출/영업이익/순이익 전년동기比)</div><div class="chart-sub" id="sub-is-yoy"></div><div class="chart-outer"><span class="y-lbl">%</span><div class="chart-wrap"><canvas id="isYoyChart"></canvas></div></div></div>
+          <div class="chart-card"><div class="chart-title">매출구성비율 (매출원가/판관비/영업이익 비중)</div><div class="chart-sub" id="sub-is-mix"></div><div class="chart-outer"><span class="y-lbl">%</span><div class="chart-wrap"><canvas id="isMixChart"></canvas></div></div></div>
+          <div class="chart-card"><div class="chart-title">비용 YoY (매출원가/판관비 증가율)</div><div class="chart-sub" id="sub-is-cost"></div><div class="chart-outer"><span class="y-lbl">%</span><div class="chart-wrap"><canvas id="isCostChart"></canvas></div></div></div>
+          <div class="chart-card"><div class="chart-title">영업외손익 (영업이익 → 세전이익 → 순이익)</div><div class="chart-sub" id="sub-is-nonop"></div><div class="chart-outer"><span class="y-lbl">억원</span><div class="chart-wrap"><canvas id="isNonopChart"></canvas></div></div></div>
         </div>
       </div>
       <!-- 사업정보 탭 -->
@@ -2744,7 +2754,219 @@ const EOK = 1e8; // 억원 환산
 function renderFinCharts() {
   if (!seriesData) return;
   if (finSub === 'cf') renderCFMain();
+  else if (finSub === 'bs') renderBSCharts();
+  else if (finSub === 'is') renderISCharts();
 }
+
+// ── 공통 헬퍼 ──────────────────────────────────────────
+const FIN_COLORS = {
+  blue:'#4f7fff', pink:'#ff5b7f', orange:'#ffa726', green:'#9ccc65',
+  yellow:'#ffd54f', purple:'#ba68c8', cyan:'#4dd0e1', red:'#ef5350', gray:'#90a4ae'
+};
+function bsVal(p, acct) { const v = p.bs && p.bs[acct]; return v == null ? null : v / EOK; }
+function isVal(p, acct) { const key = finMode === 'cumulative' ? 'isC' : 'isQ'; const v = p[key] && p[key][acct]; return v == null ? null : v / EOK; }
+function isValRaw(p, acct) { const key = finMode === 'cumulative' ? 'isC' : 'isQ'; const v = p[key] && p[key][acct]; return v == null ? null : v; }
+function netIncRaw(p) { return isValRaw(p, '당기순이익(손실)') != null ? isValRaw(p, '당기순이익(손실)') : isValRaw(p, '당기순이익'); }
+function netInc(p) { const v = netIncRaw(p); return v == null ? null : v / EOK; }
+// TTM(최근4분기 합) — 분기단독값 기준. pts 전체에서 idx 위치 기준 4개 합
+function ttmSum(allPts, idx, getter) {
+  if (idx < 3) return null;
+  let s = 0;
+  for (let k = idx - 3; k <= idx; k++) { const v = getter(allPts[k]); if (v == null) return null; s += v; }
+  return s;
+}
+function finChartBase(extraY) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { labels: { color: '#bbb', font: { size: 11 } } },
+      datalabels: { display: false },
+      tooltip: { callbacks: { label: (c) => {
+        const v = c.parsed.y;
+        const unit = c.dataset.yAxisID === 'y1' ? (c.dataset._pct ? '%' : (c.dataset._x === '회' ? '회' : '억')) : '억';
+        return `${c.dataset.label}: ${v == null ? '-' : v.toLocaleString('ko-KR', { maximumFractionDigits: unit === '%' || unit === '회' ? 1 : 0 }) + unit}`;
+      } } }
+    },
+    scales: Object.assign({
+      x: { stacked: false, ticks: { color: '#999', font: { size: 10 } }, grid: { color: 'rgba(127,127,127,.08)' } },
+      y: { ticks: { color: '#999', callback: v => (Math.abs(v) >= 10000 ? (v/10000).toFixed(1)+'조' : v.toLocaleString('ko-KR')) }, grid: { color: 'rgba(127,127,127,.08)' } }
+    }, extraY || {})
+  };
+}
+function mkChart(id, key, cfg) {
+  const el = document.getElementById(id); if (!el) return;
+  if (detailCharts[key]) detailCharts[key].destroy();
+  detailCharts[key] = new Chart(el.getContext('2d'), cfg);
+}
+const Y1_PCT = { y1: { position:'right', ticks:{ color:'#999', callback:v=>v.toFixed(0)+'%' }, grid:{ display:false } } };
+const Y1_NUM = { y1: { position:'right', ticks:{ color:'#999', callback:v=>(Math.abs(v)>=10000?(v/10000).toFixed(1)+'조':v.toLocaleString('ko-KR')) }, grid:{ display:false } } };
+const Y1_CNT = { y1: { position:'right', ticks:{ color:'#999', callback:v=>v.toFixed(1) }, grid:{ display:false } } };
+
+// ── 재무상태표 7차트 ───────────────────────────────────
+function renderBSCharts() {
+  const pts = recentPoints(12); if (!pts.length) return;
+  const labels = pts.map(p => p.label);
+  const note = `시점값 기준 · 최근 ${pts.length}개 분기 · 단위 억원`;
+
+  // ① 재무구조: 자본+부채 스택 + 부채비율 선
+  const cap = pts.map(p=>bsVal(p,'자본총계')), liab = pts.map(p=>bsVal(p,'부채총계'));
+  const drate = pts.map(p=>{ const c=bsVal(p,'자본총계'), l=bsVal(p,'부채총계'); return (c&&l!=null)?+(l/c*100).toFixed(1):null; });
+  setTxt('sub-bs-struct', note);
+  mkChart('bsStructChart','bsStruct',{ data:{ labels, datasets:[
+    { type:'bar', label:'자본총계', data:cap, backgroundColor:'rgba(79,127,255,.6)', stack:'s', order:3 },
+    { type:'bar', label:'부채총계', data:liab, backgroundColor:'rgba(255,91,127,.6)', stack:'s', order:3 },
+    { type:'line', label:'부채비율', data:drate, yAxisID:'y1', _pct:true, borderColor:FIN_COLORS.yellow, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25, order:1 },
+  ]}, options: stacked(finChartBase(Y1_PCT)) });
+
+  // ② 자산현황: 유동+비유동 스택 + 자산총계 선
+  const ca=pts.map(p=>bsVal(p,'유동자산')), nca=pts.map(p=>bsVal(p,'비유동자산')), ta=pts.map(p=>bsVal(p,'자산총계'));
+  setTxt('sub-bs-asset', note);
+  mkChart('bsAssetChart','bsAsset',{ data:{ labels, datasets:[
+    { type:'bar', label:'유동자산', data:ca, backgroundColor:'rgba(255,213,79,.7)', stack:'a', order:3 },
+    { type:'bar', label:'비유동자산', data:nca, backgroundColor:'rgba(79,127,255,.6)', stack:'a', order:3 },
+    { type:'line', label:'자산총계', data:ta, borderColor:FIN_COLORS.red, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25, order:1 },
+  ]}, options: stacked(finChartBase()) });
+
+  // ③ 부채현황: 유동+비유동 부채 스택 + 부채총계
+  const cl=pts.map(p=>bsVal(p,'유동부채')), ncl=pts.map(p=>bsVal(p,'비유동부채')), tl=pts.map(p=>bsVal(p,'부채총계'));
+  setTxt('sub-bs-debt', note);
+  mkChart('bsDebtChart','bsDebt',{ data:{ labels, datasets:[
+    { type:'bar', label:'유동부채', data:cl, backgroundColor:'rgba(239,83,80,.65)', stack:'d', order:3 },
+    { type:'bar', label:'비유동부채', data:ncl, backgroundColor:'rgba(156,204,101,.6)', stack:'d', order:3 },
+    { type:'line', label:'부채총계', data:tl, borderColor:'#d7ccc8', backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25, order:1 },
+  ]}, options: stacked(finChartBase()) });
+
+  // ④ 자본현황: 자본금+이익잉여금+기타 스택 + 자본총계
+  const eqCap=pts.map(p=>bsVal(p,'자본금')), eqRe=pts.map(p=>bsVal(p,'이익잉여금'));
+  const eqEtc=pts.map(p=>{ const t=bsVal(p,'자본총계'),c=bsVal(p,'자본금'),r=bsVal(p,'이익잉여금'); return (t!=null&&c!=null&&r!=null)?t-c-r:null; });
+  const eqTot=pts.map(p=>bsVal(p,'자본총계'));
+  setTxt('sub-bs-equity', note);
+  mkChart('bsEquityChart','bsEquity',{ data:{ labels, datasets:[
+    { type:'bar', label:'자본금', data:eqCap, backgroundColor:'rgba(79,127,255,.6)', stack:'e', order:3 },
+    { type:'bar', label:'이익잉여금', data:eqRe, backgroundColor:'rgba(156,204,101,.6)', stack:'e', order:3 },
+    { type:'bar', label:'기타자본', data:eqEtc, backgroundColor:'rgba(144,164,174,.55)', stack:'e', order:3 },
+    { type:'line', label:'자본총계', data:eqTot, borderColor:FIN_COLORS.pink, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25, order:1 },
+  ]}, options: stacked(finChartBase()) });
+
+  // ⑤ 유형자산: 장부가(막대) + CAPEX(막대) + CAPEX비율(선)  ※CAPEX는 분기/누적 모드 따름
+  const ckey = finMode === 'cumulative' ? 'cfC' : 'cfQ';
+  const ppe=pts.map(p=>bsVal(p,'유형자산'));
+  const capex=pts.map(p=>{ const v=p[ckey]&&p[ckey]['유형자산의취득']; return v==null?null:v/EOK; });
+  const ppeRate=pts.map((p,i)=>{ return (capex[i]!=null&&ppe[i]) ? +(capex[i]/ppe[i]*100).toFixed(1) : null; });
+  setTxt('sub-bs-ppe', `유형자산=시점값, CAPEX=${finMode==='cumulative'?'누적':'분기'} · 최근 ${pts.length}개 분기`);
+  mkChart('bsPpeChart','bsPpe',{ data:{ labels, datasets:[
+    { type:'bar', label:'유형자산', data:ppe, backgroundColor:'rgba(79,127,255,.5)', order:3 },
+    { type:'bar', label:'CAPEX', data:capex, backgroundColor:'rgba(255,167,38,.7)', order:3 },
+    { type:'line', label:'CAPEX비율', data:ppeRate, yAxisID:'y1', _pct:true, borderColor:FIN_COLORS.pink, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25, order:1 },
+  ]}, options: finChartBase(Y1_PCT) });
+
+  // ⑥ 운전자본: 매출채권/재고/매입채무(막대 좌축) + 매출(선 우축)  ※매출은 모드 따름
+  const ar=pts.map(p=>bsVal(p,'매출채권')), inv=pts.map(p=>bsVal(p,'재고자산')), ap=pts.map(p=>bsVal(p,'매입채무'));
+  const salesWC=pts.map(p=>isVal(p,'매출액'));
+  setTxt('sub-bs-wc', `재무상태=시점값, 매출=${finMode==='cumulative'?'누적':'분기'} · 최근 ${pts.length}개 분기`);
+  mkChart('bsWcChart','bsWc',{ data:{ labels, datasets:[
+    { type:'bar', label:'매출채권', data:ar, backgroundColor:'rgba(79,127,255,.6)', order:3 },
+    { type:'bar', label:'재고자산', data:inv, backgroundColor:'rgba(255,213,79,.7)', order:3 },
+    { type:'bar', label:'매입채무', data:ap, backgroundColor:'rgba(186,104,200,.6)', order:3 },
+    { type:'line', label:'매출액', data:salesWC, yAxisID:'y1', borderColor:FIN_COLORS.pink, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25, order:1 },
+  ]}, options: finChartBase(Y1_NUM) });
+
+  // ⑦ 회전율: 매출채권/재고/매입채무 회전율(TTM) — 분기단독 매출·매출원가 TTM ÷ 분기말 잔액
+  const allPts = (seriesData.points||[]).filter(p=>p&&p.label);
+  const baseIdx = allPts.length - pts.length;
+  const salesQ = p => { const v=p.isQ&&p.isQ['매출액']; return v==null?null:v; };
+  const cogsQ  = p => { const v=p.isQ&&p.isQ['매출원가']; return v==null?null:v; };
+  const arTurn=[],invTurn=[],apTurn=[];
+  pts.forEach((p,i)=>{
+    const gi = baseIdx + i;
+    const salesTTM = ttmSum(allPts, gi, salesQ), cogsTTM = ttmSum(allPts, gi, cogsQ);
+    const arv=p.bs&&p.bs['매출채권'], invv=p.bs&&p.bs['재고자산'], apv=p.bs&&p.bs['매입채무'];
+    arTurn.push((salesTTM!=null&&arv)?+(salesTTM/arv).toFixed(1):null);
+    invTurn.push((cogsTTM!=null&&invv)?+(cogsTTM/invv).toFixed(1):null);
+    apTurn.push((cogsTTM!=null&&apv)?+(cogsTTM/apv).toFixed(1):null);
+  });
+  setTxt('sub-bs-turn', `TTM 기준 회전율(회) · 최근 ${pts.length}개 분기 · 매출채권=매출/채권, 재고·매입=매출원가/잔액`);
+  mkChart('bsTurnChart','bsTurn',{ data:{ labels, datasets:[
+    { type:'line', label:'매출채권회전율', data:arTurn, borderColor:FIN_COLORS.blue, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25 },
+    { type:'line', label:'재고자산회전율', data:invTurn, borderColor:FIN_COLORS.orange, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25 },
+    { type:'line', label:'매입채무회전율', data:apTurn, borderColor:FIN_COLORS.green, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25 },
+  ]}, options: turnOpts() });
+}
+
+// ── 손익계산서 5차트 ───────────────────────────────────
+function renderISCharts() {
+  const pts = recentPoints(12); if (!pts.length) return;
+  const labels = pts.map(p => p.label);
+  const modeNote = finMode === 'cumulative' ? '누적(YTD)' : '분기';
+
+  // ① 이익추이: 매출/영업이익/순이익 막대 + 영업이익률·순이익률 선
+  const sales=pts.map(p=>isVal(p,'매출액')), op=pts.map(p=>isVal(p,'영업이익')), ni=pts.map(p=>netInc(p));
+  const opM=pts.map(p=>{ const s=isValRaw(p,'매출액'),o=isValRaw(p,'영업이익'); return (s&&o!=null)?+(o/s*100).toFixed(1):null; });
+  const niM=pts.map(p=>{ const s=isValRaw(p,'매출액'),n=netIncRaw(p); return (s&&n!=null)?+(n/s*100).toFixed(1):null; });
+  setTxt('sub-is-profit', `${modeNote} 기준 · 최근 ${pts.length}개 분기 · 단위 억원`);
+  mkChart('isProfitChart','isProfit',{ data:{ labels, datasets:[
+    { type:'bar', label:'매출액', data:sales, backgroundColor:'rgba(79,127,255,.45)', order:3 },
+    { type:'bar', label:'영업이익', data:op, backgroundColor:'rgba(156,204,101,.7)', order:3 },
+    { type:'bar', label:'순이익', data:ni, backgroundColor:'rgba(255,167,38,.7)', order:3 },
+    { type:'line', label:'영업이익률', data:opM, yAxisID:'y1', _pct:true, borderColor:FIN_COLORS.pink, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25, order:1 },
+    { type:'line', label:'순이익률', data:niM, yAxisID:'y1', _pct:true, borderColor:FIN_COLORS.cyan, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25, order:1 },
+  ]}, options: finChartBase(Y1_PCT) });
+
+  // ② YoY: 매출/영업이익/순이익 전년동기比(같은 분기 4칸 전 대비) — 분기단독 기준
+  const allPts = (seriesData.points||[]).filter(p=>p&&p.label);
+  const baseIdx = allPts.length - pts.length;
+  const yoy = (getter) => pts.map((p,i)=>{
+    const gi = baseIdx+i; if (gi<4) return null;
+    const cur=getter(allPts[gi]), prev=getter(allPts[gi-4]);
+    return (cur!=null&&prev&&prev!==0)?+((cur-prev)/Math.abs(prev)*100).toFixed(1):null;
+  });
+  const gS=p=>p.isQ&&p.isQ['매출액'], gO=p=>p.isQ&&p.isQ['영업이익'], gN=p=>p.isQ?(p.isQ['당기순이익(손실)']!=null?p.isQ['당기순이익(손실)']:p.isQ['당기순이익']):null;
+  setTxt('sub-is-yoy', `전년 동기 대비 성장률 · 분기단독 기준 · 최근 ${pts.length}개 분기`);
+  mkChart('isYoyChart','isYoy',{ data:{ labels, datasets:[
+    { type:'line', label:'매출 YoY', data:yoy(gS), borderColor:FIN_COLORS.blue, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25 },
+    { type:'line', label:'영업이익 YoY', data:yoy(gO), borderColor:FIN_COLORS.green, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25 },
+    { type:'line', label:'순이익 YoY', data:yoy(gN), borderColor:FIN_COLORS.orange, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25 },
+  ]}, options: pctLineOpts() });
+
+  // ③ 매출구성비율: 매출원가/판관비/영업이익 비중(100% 스택)
+  const mixCogs=[],mixSga=[],mixOp=[];
+  pts.forEach(p=>{
+    const s=isValRaw(p,'매출액'), c=isValRaw(p,'매출원가'), sg=isValRaw(p,'판매비와관리비'), o=isValRaw(p,'영업이익');
+    if(!s){ mixCogs.push(null);mixSga.push(null);mixOp.push(null); return; }
+    mixCogs.push(c!=null?+(c/s*100).toFixed(1):null);
+    mixSga.push(sg!=null?+(sg/s*100).toFixed(1):null);
+    mixOp.push(o!=null?+(o/s*100).toFixed(1):null);
+  });
+  setTxt('sub-is-mix', `${modeNote} 기준 · 매출 대비 비중(%) · 최근 ${pts.length}개 분기`);
+  mkChart('isMixChart','isMix',{ data:{ labels, datasets:[
+    { type:'bar', label:'매출원가', data:mixCogs, backgroundColor:'rgba(239,83,80,.6)', stack:'m' },
+    { type:'bar', label:'판관비', data:mixSga, backgroundColor:'rgba(255,167,38,.6)', stack:'m' },
+    { type:'bar', label:'영업이익', data:mixOp, backgroundColor:'rgba(156,204,101,.6)', stack:'m' },
+  ]}, options: stacked(pctLineOpts()) });
+
+  // ④ 비용 YoY: 매출원가/판관비 증가율(분기단독, 전년동기)
+  const gC=p=>p.isQ&&p.isQ['매출원가'], gSga=p=>p.isQ&&p.isQ['판매비와관리비'];
+  setTxt('sub-is-cost', `비용 전년 동기 대비 증가율 · 분기단독 · 최근 ${pts.length}개 분기`);
+  mkChart('isCostChart','isCost',{ data:{ labels, datasets:[
+    { type:'line', label:'매출원가 YoY', data:yoy(gC), borderColor:FIN_COLORS.red, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25 },
+    { type:'line', label:'판관비 YoY', data:yoy(gSga), borderColor:FIN_COLORS.orange, backgroundColor:'transparent', borderWidth:2, pointRadius:2, tension:.25 },
+  ]}, options: pctLineOpts() });
+
+  // ⑤ 영업외손익: 영업이익 → 세전이익 → 순이익 (막대)
+  const opL=pts.map(p=>isVal(p,'영업이익')), pre=pts.map(p=>isVal(p,'법인세비용차감전순이익')), niL=pts.map(p=>netInc(p));
+  setTxt('sub-is-nonop', `${modeNote} 기준 · 영업이익→세전이익→순이익 · 최근 ${pts.length}개 분기`);
+  mkChart('isNonopChart','isNonop',{ data:{ labels, datasets:[
+    { type:'bar', label:'영업이익', data:opL, backgroundColor:'rgba(156,204,101,.65)' },
+    { type:'bar', label:'세전이익', data:pre, backgroundColor:'rgba(79,127,255,.55)' },
+    { type:'bar', label:'순이익', data:niL, backgroundColor:'rgba(255,167,38,.7)' },
+  ]}, options: finChartBase() });
+}
+
+function setTxt(id, t){ const e=document.getElementById(id); if(e) e.textContent=t; }
+function stacked(opt){ opt.scales.x.stacked=true; opt.scales.y.stacked=true; return opt; }
+function pctLineOpts(){ const o=finChartBase(); o.scales.y.stacked=false; o.scales.y.ticks.callback=v=>v.toFixed(0)+'%'; return o; }
+function turnOpts(){ const o=finChartBase(); o.scales.y.ticks.callback=v=>v.toFixed(1); return o; }
 
 // 현금흐름분석: 막대=FCF(영업CF−CAPEX), 선=영업/투자/재무현금흐름
 function renderCFMain() {
