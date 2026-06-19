@@ -2862,6 +2862,21 @@ function recentPoints(n = 12) {
   return pts.slice(-n);
 }
 const EOK = 1e8; // 억원 환산
+// 🔴 억(億) 단위 값 표시 포맷터 — Y축 눈금과 툴팁이 같은 규칙을 쓰도록 공용화.
+//    값이 크면(|v|≥10,000억=1조) '조'로, 아니면 '억'으로. 삼성전자처럼 큰 회사도
+//    Y축(조)과 툴팁(억)이 어긋나지 않게 통일. 1조 미만은 천단위 콤마+억.
+function fmtEok(v) {
+  if (v == null) return '-';
+  const a = Math.abs(v);
+  if (a >= 10000) return (v / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 2 }) + '조';
+  return v.toLocaleString('ko-KR', { maximumFractionDigits: 0 }) + '억';
+}
+// Y축 눈금용(라벨이라 소수 1자리로 더 짧게)
+function fmtEokAxis(v) {
+  const a = Math.abs(v);
+  if (a >= 10000) return (v / 10000).toFixed(1) + '조';
+  return v.toLocaleString('ko-KR');
+}
 
 function renderFinCharts() {
   if (!seriesData) return;
@@ -2920,13 +2935,19 @@ function finChartBase(extraY) {
       datalabels: { display: false },
       tooltip: { callbacks: { label: (c) => {
         const v = c.parsed.y;
-        const unit = c.dataset.yAxisID === 'y1' ? (c.dataset._pct ? '%' : (c.dataset._x === '회' ? '회' : '억')) : '억';
-        return `${c.dataset.label}: ${v == null ? '-' : v.toLocaleString('ko-KR', { maximumFractionDigits: unit === '%' || unit === '회' ? 1 : 0 }) + unit}`;
+        if (v == null) return `${c.dataset.label}: -`;
+        // 우축(y1)이 %·회면 그 단위, 그 외(억 금액)는 조/억 자동 스케일(fmtEok)로 Y축과 통일
+        if (c.dataset.yAxisID === 'y1') {
+          if (c.dataset._pct) return `${c.dataset.label}: ${v.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}%`;
+          if (c.dataset._x === '회') return `${c.dataset.label}: ${v.toLocaleString('ko-KR', { maximumFractionDigits: 1 })}회`;
+          return `${c.dataset.label}: ${fmtEok(v)}`;
+        }
+        return `${c.dataset.label}: ${fmtEok(v)}`;
       } } }
     },
     scales: Object.assign({
       x: { stacked: false, ticks: { color: '#999', font: { size: 10 } }, grid: { color: 'rgba(127,127,127,.08)' } },
-      y: { ticks: { color: '#999', callback: v => (Math.abs(v) >= 10000 ? (v/10000).toFixed(1)+'조' : v.toLocaleString('ko-KR')) }, grid: { color: 'rgba(127,127,127,.08)' } }
+      y: { ticks: { color: '#999', callback: v => fmtEokAxis(v) }, grid: { color: 'rgba(127,127,127,.08)' } }
     }, extraY || {})
   };
 }
@@ -2936,7 +2957,7 @@ function mkChart(id, key, cfg) {
   detailCharts[key] = new Chart(el.getContext('2d'), cfg);
 }
 const Y1_PCT = { y1: { position:'right', ticks:{ color:'#999', callback:v=>v.toFixed(0)+'%' }, grid:{ display:false } } };
-const Y1_NUM = { y1: { position:'right', ticks:{ color:'#999', callback:v=>(Math.abs(v)>=10000?(v/10000).toFixed(1)+'조':v.toLocaleString('ko-KR')) }, grid:{ display:false } } };
+const Y1_NUM = { y1: { position:'right', ticks:{ color:'#999', callback:v=>fmtEokAxis(v) }, grid:{ display:false } } };
 // 원(₩) 단위 축 포맷: 투자지표(수정주가·BPS·EPS·SPS 등)는 데이터가 '원'이라
 // 억원 가정 포맷터(Y1_NUM)를 쓰면 46,858원→4.7조로 깨짐. 만/억 단위로 축약.
 function wonTick(v) {
@@ -2996,7 +3017,7 @@ const Y1_CNT = { y1: { position:'right', ticks:{ color:'#999', callback:v=>v.toF
 function renderBSCharts() {
   const pts = recentPoints(12); if (!pts.length) return;
   const labels = pts.map(p => p.label);
-  const note = `시점값 기준 · 최근 ${pts.length}개 분기 · 단위 억원`;
+  const note = `시점값 기준 · 최근 ${pts.length}개 분기 · 단위 억원(1조=1만억)`;
 
   // ① 재무구조: 자본+부채 스택 + 부채비율 선
   const cap = pts.map(p=>bsVal(p,'자본총계')), liab = pts.map(p=>bsVal(p,'부채총계'));
@@ -3093,7 +3114,7 @@ function renderISCharts() {
   const sales=pts.map(p=>isVal(p,'매출액')), op=pts.map(p=>isVal(p,'영업이익')), ni=pts.map(p=>netInc(p));
   const opM=pts.map(p=>{ const s=isValRaw(p,'매출액'),o=isValRaw(p,'영업이익'); return (s&&o!=null)?+(o/s*100).toFixed(1):null; });
   const niM=pts.map(p=>{ const s=isValRaw(p,'매출액'),n=netIncRaw(p); return (s&&n!=null)?+(n/s*100).toFixed(1):null; });
-  setTxt('sub-is-profit', `${modeNote} 기준 · 최근 ${pts.length}개 분기 · 단위 억원`);
+  setTxt('sub-is-profit', `${modeNote} 기준 · 최근 ${pts.length}개 분기 · 단위 억원(1조=1만억)`);
   mkChart('isProfitChart','isProfit',{ data:{ labels, datasets:[
     { type:'bar', label:'매출액', data:sales, backgroundColor:'rgba(79,127,255,.45)', order:3 },
     { type:'bar', label:'영업이익', data:op, backgroundColor:'rgba(156,204,101,.7)', order:3 },
@@ -3176,7 +3197,7 @@ function renderCFMain() {
   if (detailCharts.cfMain) detailCharts.cfMain.destroy();
   const modeLbl = finMode === 'cumulative' ? '누적(YTD)' : (finMode === 'ttm' ? '4분기누적(TTM)' : '분기');
   document.getElementById('sub-cf-main').textContent =
-    `${modeLbl} 기준 · 최근 ${pts.length}개 분기 · 단위 억원 · FCF = 영업CF − CAPEX`;
+    `${modeLbl} 기준 · 최근 ${pts.length}개 분기 · 단위 억원(1조=1만억) · FCF = 영업CF − CAPEX`;
   detailCharts.cfMain = new Chart(ctx, {
     data: {
       labels,
@@ -3193,11 +3214,11 @@ function renderCFMain() {
       plugins: {
         legend: { labels: { color: '#bbb', font: { size: 11 } } },
         datalabels: { display: false },
-        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y == null ? '-' : c.parsed.y.toLocaleString('ko-KR', { maximumFractionDigits: 0 }) + '억'}` } }
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmtEok(c.parsed.y)}` } }
       },
       scales: {
         x: { ticks: { color: '#999', font: { size: 10 } }, grid: { color: 'rgba(127,127,127,.08)' } },
-        y: { ticks: { color: '#999', callback: v => (v / 10000).toFixed(1) + '조' }, grid: { color: 'rgba(127,127,127,.08)' } }
+        y: { ticks: { color: '#999', callback: v => fmtEokAxis(v) }, grid: { color: 'rgba(127,127,127,.08)' } }
       }
     }
   });
@@ -3211,7 +3232,7 @@ function renderCFCapex() {
   const capex = pts.map(p => cfVal(p, '유형자산의취득'));
   const fcf = pts.map((p, i) => (cfo[i] == null || capex[i] == null) ? null : cfo[i] - capex[i]);
   const modeLbl = finMode === 'cumulative' ? '누적(YTD)' : (finMode === 'ttm' ? '4분기누적(TTM)' : '분기');
-  setTxt('sub-cf-capex', `${modeLbl} 기준 · 최근 ${pts.length}개 분기 · 단위 억원 · CAPEX = 유형자산의취득`);
+  setTxt('sub-cf-capex', `${modeLbl} 기준 · 최근 ${pts.length}개 분기 · 단위 억원(1조=1만억) · CAPEX = 유형자산의취득`);
   mkChart('cfCapexChart', 'cfCapex', { data: { labels, datasets: [
     { type: 'bar', label: 'CAPEX', data: capex, backgroundColor: 'rgba(255,167,38,.7)', order: 3 },
     { type: 'bar', label: 'FCF', data: fcf, backgroundColor: 'rgba(79,127,255,.55)', order: 3 },
@@ -3243,7 +3264,7 @@ function renderCFFcf() {
   const capex = pts.map(p => cfVal(p, '유형자산의취득'));
   const fcf = pts.map((p, i) => (cfo[i] == null || capex[i] == null) ? null : cfo[i] - capex[i]);
   const modeLbl = finMode === 'cumulative' ? '누적(YTD)' : (finMode === 'ttm' ? '4분기누적(TTM)' : '분기');
-  setTxt('sub-cf-fcf', `${modeLbl} 기준 · 최근 ${pts.length}개 분기 · 단위 억원 · FCF = 영업CF − CAPEX`);
+  setTxt('sub-cf-fcf', `${modeLbl} 기준 · 최근 ${pts.length}개 분기 · 단위 억원(1조=1만억) · FCF = 영업CF − CAPEX`);
   mkChart('cfFcfChart', 'cfFcf', { data: { labels, datasets: [
     { type: 'bar', label: 'FCF(잉여현금흐름)', data: fcf, backgroundColor: 'rgba(79,127,255,.55)', order: 3 },
     { type: 'bar', label: 'CAPEX', data: capex, backgroundColor: 'rgba(255,167,38,.7)', order: 3 },
