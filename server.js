@@ -222,7 +222,7 @@ function fetchDartList(params) {
 
 function fetchDartAPI(params, endpoint) {
   return new Promise((resolve, reject) => {
-    const ep = endpoint || 'fnlttSinglAcntAll';
+    const ep = endpoint || 'fnlttSinglAcnt';  // 기본=요약본(프론트 차트/표가 쓰는 그것). All은 호출부에서 명시.
     const qs = Object.entries(params)
       .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
       .join('&');
@@ -251,19 +251,15 @@ function fetchDartAPI(params, endpoint) {
   });
 }
 
-// 전체계정(All) 우선, 빈 응답/오류면 요약본(Acnt) 폴백 — api/index.js와 동일.
-async function fetchFinancialMerged(baseParams) {
-  const tryAll = async (fs_div) => {
-    try {
-      const d = await fetchDartAPI({ ...baseParams, fs_div }, 'fnlttSinglAcntAll');
-      if (!d || d.status !== '000' || !Array.isArray(d.list)) return [];
-      // 🔴 fnlttSinglAcntAll 응답엔 fs_div 필드가 없음 → 요청한 구분을 직접 주입(프론트 CFS/OFS 필터용)
-      return d.list.map(it => ({ ...it, fs_div: it.fs_div || fs_div }));
-    } catch (e) { return []; }
-  };
-  let list = [...(await tryAll('CFS')), ...(await tryAll('OFS'))];
-  if (list.length) return { status: '000', list };
-  return await fetchDartAPI(baseParams, 'fnlttSinglAcnt');
+// 현금흐름표(CF)만 별도 조회 — AI 분석 프롬프트에만 사용(차트/표는 기존 요약본 그대로).
+// 전체계정 API에서 CF 항목만 추려 반환. 실패해도 분석은 정상 진행(현금흐름 섹션만 생략). api/index.js와 동일.
+async function fetchCashFlow(baseParams, fsDiv) {
+  const fs = fsDiv === 'OFS' ? 'OFS' : 'CFS';
+  try {
+    const d = await fetchDartAPI({ ...baseParams, fs_div: fs }, 'fnlttSinglAcntAll');
+    if (!d || d.status !== '000' || !Array.isArray(d.list)) return [];
+    return d.list.filter(it => it.sj_div === 'CF');
+  } catch (e) { return []; }
 }
 
 // ──── Gemini API ──────────────────────────────────────────
@@ -315,7 +311,7 @@ function pctStr(amt, base) {
   return `${(a / b * 100).toFixed(1)}%`;
 }
 
-function buildFinancialPrompt(corpName, year, fsDiv, list, discussionData = null) {
+function buildFinancialPrompt(corpName, year, fsDiv, list, discussionData = null, cfItems = []) {
   const items = list.filter(i => i.fs_div === fsDiv);
   if (!items.length) return null;
 
@@ -327,9 +323,11 @@ function buildFinancialPrompt(corpName, year, fsDiv, list, discussionData = null
   const assets   = get('BS', '자산총계');
   const liab     = get('BS', '부채총계');
   const equity   = get('BS', '자본총계');
-  const cfo = get('CF', '영업활동현금흐름');
-  const cfi = get('CF', '투자활동현금흐름');
-  const cff = get('CF', '재무활동현금흐름');
+  // 현금흐름표 — 별도 조회한 cfItems(전체계정 API의 CF 항목)에서 찾음. 없으면 표 자동 생략.
+  const getCF = (nm) => (cfItems || []).find(i => i.account_nm === nm);
+  const cfo = getCF('영업활동현금흐름');
+  const cfi = getCF('투자활동현금흐름');
+  const cff = getCF('재무활동현금흐름');
   const fsNm = items[0]?.fs_nm || (fsDiv === 'CFS' ? '연결재무제표' : '재무제표');
   const y = [year - 2, year - 1, year];
 
@@ -556,7 +554,7 @@ async function handleRequest(req, res) {
       res.end(JSON.stringify({ status: 'ERR', message: 'corp_code, bsns_year 필수' }));
       return;
     }
-    const data = await fetchFinancialMerged({
+    const data = await fetchDartAPI({
       crtfc_key: DART_API_KEY,
       corp_code,
       bsns_year,
@@ -570,9 +568,19 @@ async function handleRequest(req, res) {
   // ── AI Analysis
   if (pathname === '/api/analyze' && req.method === 'POST') {
     const bodyStr = await readBody(req);
-    const { corpName, year, fsDiv, list, discussionData } = JSON.parse(bodyStr);
+    const { corpName, corpCode, reprtCode, year, fsDiv, list, discussionData } = JSON.parse(bodyStr);
 
-    const prompt = buildFinancialPrompt(corpName, parseInt(year), fsDiv, list, discussionData);
+    // 현금흐름표(CF)는 요약본(list)에 없음 → 분석 시점에만 전체계정 API로 별도 조회. api/index.js와 동일.
+    let cfItems = [];
+    if (corpCode) {
+      try {
+        cfItems = await fetchCashFlow(
+          { crtfc_key: DART_API_KEY, corp_code: corpCode, bsns_year: String(year), reprt_code: reprtCode || '11011' },
+          fsDiv
+        );
+      } catch (e) { console.error('CF 조회 실패(분석 계속):', e.message); }
+    }
+    const prompt = buildFinancialPrompt(corpName, parseInt(year), fsDiv, list, discussionData, cfItems);
     if (!prompt) {
       res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ error: '분석할 데이터가 없습니다' }));

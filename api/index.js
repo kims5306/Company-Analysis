@@ -205,8 +205,7 @@ function dartRequest(options) {
 }
 
 function fetchDartAPI(params, endpoint) {
-  // endpoint 미지정 시 전체계정(All) 우선 — 판관비·R&D·현금흐름 등 풍부. 호출부에서 폴백 처리.
-  const ep = endpoint || 'fnlttSinglAcntAll';
+  const ep = endpoint || 'fnlttSinglAcnt';  // 기본=요약본(프론트 차트/표가 쓰는 그것). All은 호출부에서 명시.
   const qs = Object.entries(params).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
   return dartRequest({
     hostname: 'opendart.fss.or.kr',
@@ -221,23 +220,15 @@ function fetchDartAPI(params, endpoint) {
   });
 }
 
-// 전체계정(All) 우선, 빈 응답/오류면 요약본(Acnt)로 폴백 — 데이터 손실 0 보장.
-// All은 fnlttSinglAcntAll 스펙상 fs_div 구분을 위해 fs_div 파라미터가 필요할 수 있어 양쪽(CFS/OFS) 시도.
-async function fetchFinancialMerged(baseParams) {
-  // 1) 전체계정: CFS(연결) + OFS(별도) 둘 다 받아 합침
-  const tryAll = async (fs_div) => {
-    try {
-      const d = await fetchDartAPI({ ...baseParams, fs_div }, 'fnlttSinglAcntAll');
-      if (!d || d.status !== '000' || !Array.isArray(d.list)) return [];
-      // 🔴 fnlttSinglAcntAll 응답엔 fs_div 필드가 없음 → 요청한 구분을 직접 주입(프론트가 CFS/OFS 필터에 사용)
-      return d.list.map(it => ({ ...it, fs_div: it.fs_div || fs_div }));
-    } catch (e) { return []; }
-  };
-  let list = [...(await tryAll('CFS')), ...(await tryAll('OFS'))];
-  if (list.length) return { status: '000', list };
-  // 2) 폴백: 기존 요약본(파라미터에 fs_div 없음 — 단일계정 API는 자동 구분)
-  const d = await fetchDartAPI(baseParams, 'fnlttSinglAcnt');
-  return d;
+// 현금흐름표(CF)만 별도 조회 — AI 분석 프롬프트에만 사용(차트/표는 기존 요약본 그대로).
+// 전체계정 API에서 CF 항목만 추려 반환. 실패해도 분석은 정상 진행(현금흐름 섹션만 생략).
+async function fetchCashFlow(baseParams, fsDiv) {
+  const fs = fsDiv === 'OFS' ? 'OFS' : 'CFS';
+  try {
+    const d = await fetchDartAPI({ ...baseParams, fs_div: fs }, 'fnlttSinglAcntAll');
+    if (!d || d.status !== '000' || !Array.isArray(d.list)) return [];
+    return d.list.filter(it => it.sj_div === 'CF');
+  } catch (e) { return []; }
 }
 
 function fetchDartList(params) {
@@ -303,7 +294,7 @@ function pctStr(num, den) {
   return (n / d * 100).toFixed(1) + '%';
 }
 
-function buildFinancialPrompt(corpName, year, fsDiv, list, discussionData = null) {
+function buildFinancialPrompt(corpName, year, fsDiv, list, discussionData = null, cfItems = []) {
   const items = list.filter(i => i.fs_div === fsDiv);
   if (!items.length) return null;
   const get = (sj, nm) => items.find(i => i.sj_div === sj && i.account_nm === nm);
@@ -313,10 +304,11 @@ function buildFinancialPrompt(corpName, year, fsDiv, list, discussionData = null
   const assets   = get('BS', '자산총계');
   const liab     = get('BS', '부채총계');
   const equity   = get('BS', '자본총계');
-  // 현금흐름표(전체계정 API에서만 제공). 없으면 표에서 자동 생략.
-  const cfo = get('CF', '영업활동현금흐름');
-  const cfi = get('CF', '투자활동현금흐름');
-  const cff = get('CF', '재무활동현금흐름');
+  // 현금흐름표 — 별도 조회한 cfItems(전체계정 API의 CF 항목)에서 찾음. 없으면 표 자동 생략.
+  const getCF = (nm) => (cfItems || []).find(i => i.account_nm === nm);
+  const cfo = getCF('영업활동현금흐름');
+  const cfi = getCF('투자활동현금흐름');
+  const cff = getCF('재무활동현금흐름');
   const fsNm = items[0]?.fs_nm || (fsDiv === 'CFS' ? '연결재무제표' : '재무제표');
   const y = [year - 2, year - 1, year];
   const row = (item, label) => {
@@ -485,7 +477,7 @@ module.exports = async (req, res) => {
     if (pathname === '/api/financial') {
       const { corp_code, bsns_year, reprt_code } = query;
       if (!corp_code || !bsns_year) { res.writeHead(400); res.end(JSON.stringify({ status: 'ERR', message: 'corp_code, bsns_year 필수' })); return; }
-      const data = await fetchFinancialMerged({ crtfc_key: DART_API_KEY, corp_code, bsns_year, reprt_code: reprt_code || '11011' });
+      const data = await fetchDartAPI({ crtfc_key: DART_API_KEY, corp_code, bsns_year, reprt_code: reprt_code || '11011' });
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify(data));
       return;
@@ -494,8 +486,19 @@ module.exports = async (req, res) => {
     // ── AI 분석
     if (pathname === '/api/analyze' && req.method === 'POST') {
       const bodyStr = await readBody(req);
-      const { corpName, year, fsDiv, list, discussionData } = JSON.parse(bodyStr);
-      const prompt = buildFinancialPrompt(corpName, parseInt(year), fsDiv, list, discussionData);
+      const { corpName, corpCode, reprtCode, year, fsDiv, list, discussionData } = JSON.parse(bodyStr);
+      // 현금흐름표(CF)는 요약본(list)에 없음 → 분석 시점에만 전체계정 API로 별도 조회.
+      // 차트/표가 쓰는 financial 엔드포인트는 건드리지 않음(요약본 그대로).
+      let cfItems = [];
+      if (corpCode) {
+        try {
+          cfItems = await fetchCashFlow(
+            { crtfc_key: DART_API_KEY, corp_code: corpCode, bsns_year: String(year), reprt_code: reprtCode || '11011' },
+            fsDiv
+          );  // 이미 CF 항목만 추려진 배열을 반환
+        } catch (e) { console.error('CF 조회 실패(분석 계속):', e.message); }
+      }
+      const prompt = buildFinancialPrompt(corpName, parseInt(year), fsDiv, list, discussionData, cfItems);
       if (!prompt) { res.writeHead(400); res.end(JSON.stringify({ error: '분석할 데이터가 없습니다' })); return; }
       // 캐시 키 = 기업·연도·재무구분 + 프롬프트 해시(토론방 포함 내용 바뀌면 새로 분석)
       const cacheKey = `${corpName}|${year}|${fsDiv}|${prompt.length}|${hashStr(prompt)}`;

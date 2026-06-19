@@ -2499,6 +2499,8 @@ async function requestAI() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         corpName: selectedCorp.corp_name,
+        corpCode: selectedCorp.corp_code,
+        reprtCode: document.getElementById('an-reprt')?.value || '11011',
         year,
         fsDiv: currentFSDiv,
         list: financialData,
