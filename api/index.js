@@ -252,13 +252,76 @@ function seriesSet(key, value) {
 function normNm(s) { return (s || '').replace(/\s+/g, ''); }
 function toNum(s) { const n = parseFloat(String(s || '').replace(/,/g, '')); return isNaN(n) ? null : n; }
 
-// 한 보고서(분기)의 list에서 sj_div+정규화 계정명으로 분기값·누적값 둘 다 추출.
-// IS는 thstrm_amount(분기)·thstrm_add_amount(누적) 둘 다 제공. CF/BS는 thstrm_amount만.
-function pickField(list, sjDiv, accountNm) {
-  const target = normNm(accountNm);
-  const hit = (list || []).find(i => i.sj_div === sjDiv && normNm(i.account_nm) === target);
-  if (!hit) return { amt: null, add: null };
-  return { amt: toNum(hit.thstrm_amount), add: toNum(hit.thstrm_add_amount) };
+// 🔴 XBRL 표준 element ID(account_id) 매핑 — 근본 해결.
+//    계정명(account_nm)은 기업·보고서마다 흔들리지만(디아이동일 '수익(매출액)'↔'매출액',
+//    '영업활동현금흐름'↔'영업활동으로 인한 현금흐름') account_id는 K-IFRS 표준이라 고정.
+//    실측 확인: ifrs-full_Revenue, ifrs-full_CashFlowsFromUsedInOperatingActivities 등 동일.
+//    매칭 우선순위: ① account_id 정확일치 → ② 계정명 별칭(account_id 없는 일부 BS항목 보완).
+const ACCT_IDS = {
+  // IS
+  '매출액': ['ifrs-full_Revenue', 'dart_Revenue'],
+  '매출원가': ['ifrs-full_CostOfSales'],
+  '매출총이익': ['ifrs-full_GrossProfit'],
+  '영업이익': ['dart_OperatingIncomeLoss', 'ifrs-full_ProfitLossFromOperatingActivities'],
+  '판매비와관리비': ['dart_TotalSellingGeneralAdministrativeExpenses', 'ifrs-full_SellingGeneralAndAdministrativeExpense'],
+  '당기순이익(손실)': ['ifrs-full_ProfitLoss'],
+  '지배기업소유주순이익': ['ifrs-full_ProfitLossAttributableToOwnersOfParent'],
+  // CF
+  '영업활동현금흐름': ['ifrs-full_CashFlowsFromUsedInOperatingActivities'],
+  '투자활동현금흐름': ['ifrs-full_CashFlowsFromUsedInInvestingActivities'],
+  '재무활동현금흐름': ['ifrs-full_CashFlowsFromUsedInFinancingActivities'],
+  '유형자산의취득': ['ifrs-full_PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities'],
+  '유형자산의처분': ['ifrs-full_ProceedsFromSalesOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities'],
+  '감가상각비': ['ifrs-full_DepreciationAndAmortisationExpense', 'dart_DepreciationExpense'],
+  // BS
+  '자산총계': ['ifrs-full_Assets'],
+  '유동자산': ['ifrs-full_CurrentAssets'],
+  '비유동자산': ['ifrs-full_NoncurrentAssets'],
+  '부채총계': ['ifrs-full_Liabilities'],
+  '유동부채': ['ifrs-full_CurrentLiabilities'],
+  '비유동부채': ['ifrs-full_NoncurrentLiabilities'],
+  '자본총계': ['ifrs-full_Equity'],
+  '자본금': ['ifrs-full_IssuedCapital'],
+  '이익잉여금': ['ifrs-full_RetainedEarnings'],
+  '유형자산': ['ifrs-full_PropertyPlantAndEquipment'],
+  '매출채권': ['ifrs-full_TradeAndOtherCurrentReceivables', 'dart_ShortTermTradeReceivable'],
+  '재고자산': ['ifrs-full_Inventories'],
+  '매입채무': ['ifrs-full_TradeAndOtherCurrentPayables', 'dart_ShortTermTradePayables'],
+};
+
+// 계정명 별칭(account_id가 비어있는 일부 항목·구버전 공시 보완용 폴백)
+const ACCT_ALIASES = {
+  '매출액': ['매출액', '수익(매출액)', '영업수익', '매출및지분법손익', '매출'],
+  '매출원가': ['매출원가', '영업비용'],
+  '매출총이익': ['매출총이익', '매출총이익(손실)'],
+  '영업이익': ['영업이익', '영업이익(손실)'],
+  '판매비와관리비': ['판매비와관리비', '판매비와관리비(물류원가등포함)'],
+  '영업활동현금흐름': ['영업활동현금흐름', '영업활동으로인한현금흐름', '영업활동으로인한순현금흐름'],
+  '투자활동현금흐름': ['투자활동현금흐름', '투자활동으로인한현금흐름', '투자활동으로인한순현금흐름'],
+  '재무활동현금흐름': ['재무활동현금흐름', '재무활동으로인한현금흐름', '재무활동으로인한순현금흐름'],
+  '유형자산의취득': ['유형자산의취득', '유형자산의증가', '유형자산취득'],
+  '유형자산의처분': ['유형자산의처분', '유형자산의감소', '유형자산처분'],
+  '감가상각비': ['감가상각비', '감가상각비와무형자산상각비'],
+};
+
+// 핵심 계정이 끝까지 안 잡히면 기록(새 기업 변형 감지용 — fetchFinancialSeries에서 모아 응답에 첨부)
+const MISS_ACCTS = new Set(['매출액', '영업활동현금흐름', '투자활동현금흐름', '재무활동현금흐름']);
+
+// 한 보고서(분기)의 list에서 sj_div+계정으로 분기값·누적값 둘 다 추출.
+// 🔴 ① account_id(XBRL 표준) 우선 → ② 계정명 별칭 폴백. 둘 다 실패 시 null + miss 기록.
+function pickField(list, sjDiv, accountNm, missSink) {
+  const ids = (ACCT_IDS[accountNm] || []);
+  for (const id of ids) {
+    const hit = (list || []).find(i => i.sj_div === sjDiv && (i.account_id || '') === id);
+    if (hit) return { amt: toNum(hit.thstrm_amount), add: toNum(hit.thstrm_add_amount) };
+  }
+  const candidates = (ACCT_ALIASES[accountNm] || [accountNm]).map(normNm);
+  for (const target of candidates) {
+    const hit = (list || []).find(i => i.sj_div === sjDiv && normNm(i.account_nm) === target);
+    if (hit) return { amt: toNum(hit.thstrm_amount), add: toNum(hit.thstrm_add_amount) };
+  }
+  if (missSink && MISS_ACCTS.has(accountNm)) missSink.add(accountNm);
+  return { amt: null, add: null };
 }
 
 // 재무 분기 시계열. 각 분기 포인트에 quarter(분기단독)·cumulative(누적) 둘 다 담는다.
@@ -280,6 +343,7 @@ async function fetchFinancialSeries(corpCode, years, fsDiv) {
   // Promise.all로 동시 호출해 최장 1건(~8s) 수준으로 단축(years=4도 60s 안). 로직 동일.
   const raw = {};
   for (let y = startY; y <= curY; y++) raw[y] = {};
+  const missSink = new Set();   // 🔴 핵심계정 누락 감지(새 기업 변형 탐지용)
   const jobs = [];
   for (let y = startY; y <= curY; y++) {
     for (const [q, rc] of REPRT) {
@@ -288,12 +352,14 @@ async function fetchFinancialSeries(corpCode, years, fsDiv) {
         try { d = await fetchDartAPI({ crtfc_key: DART_API_KEY, corp_code: corpCode, bsns_year: String(y), reprt_code: rc, fs_div: fs }, 'fnlttSinglAcntAll'); }
         catch (e) { d = null; }
         if (!d || d.status !== '000' || !Array.isArray(d.list)) { raw[y][q] = null; return; }
-        const bs = {}; BS_ACCTS.forEach(a => { bs[a] = pickField(d.list, 'BS', a).amt; });
-        const is = {}; IS_ACCTS.forEach(a => { is[a] = pickField(d.list, 'IS', a); });   // {amt,add}
-        // 순이익 자동탐색(계정명 변형: 당기/분기/반기순이익 ± (손실), 법인세·주당·계속영업 제외)
-        const niHit = d.list.find(it => it.sj_div === 'IS' && /(당기|분기|반기)순이익/.test(normNm(it.account_nm)) && !/주당|법인세|계속영업|중단/.test(normNm(it.account_nm)));
+        const bs = {}; BS_ACCTS.forEach(a => { bs[a] = pickField(d.list, 'BS', a, missSink).amt; });
+        const is = {}; IS_ACCTS.forEach(a => { is[a] = pickField(d.list, 'IS', a, missSink); });   // {amt,add}
+        // 🔴 순이익 = account_id 'ifrs-full_ProfitLoss'(K-IFRS 표준, 계정명 변형에 불변) 우선.
+        //    폴백: 계정명 자동탐색(당기/분기/반기순이익 ± (손실), 법인세·주당·계속영업·지배/비지배 제외).
+        let niHit = d.list.find(it => it.sj_div === 'IS' && (it.account_id || '') === 'ifrs-full_ProfitLoss');
+        if (!niHit) niHit = d.list.find(it => it.sj_div === 'IS' && /(당기|분기|반기)순이익/.test(normNm(it.account_nm)) && !/주당|법인세|계속영업|중단|지배|비지배/.test(normNm(it.account_nm)));
         is._ni = niHit ? { amt: toNum(niHit.thstrm_amount), add: toNum(niHit.thstrm_add_amount) } : { amt: null, add: null };
-        const cf = {}; CF_ACCTS.forEach(a => { cf[a] = pickField(d.list, 'CF', a).amt; });
+        const cf = {}; CF_ACCTS.forEach(a => { cf[a] = pickField(d.list, 'CF', a, missSink).amt; });
         raw[y][q] = { bs, is, cf };
       })());
     }
@@ -341,7 +407,7 @@ async function fetchFinancialSeries(corpCode, years, fsDiv) {
       points.push(pt);
     }
   }
-  return { fsDiv: fs, years, points };
+  return { fsDiv: fs, years, points, _missing: [...missSink] };
 }
 
 // ──── 밸류에이션 보조: 연도별 상장주식수 + 배당 (PER/PBR/EPS/DPS용) ────

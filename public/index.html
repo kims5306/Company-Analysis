@@ -1362,6 +1362,13 @@ function switchFS(div) {
   document.getElementById('btn-cfs').classList.toggle('active', div === 'CFS');
   document.getElementById('btn-ofs').classList.toggle('active', div === 'OFS');
   if (financialData) renderAll();
+  // 🔴 세부탭(사업/재무/투자)도 연결·별도 선택을 따라야 함 → 캐시 무효화 후 현재 탭 재로드.
+  //    기존엔 요약화면만 갱신되고 세부탭은 옛 fsDiv 데이터 그대로였음(연동 버그).
+  seriesData = null; seriesLoadedFor = null;
+  if (typeof valLoadedFor !== 'undefined') { valLoadedFor = null; valExtra = null; }
+  if (typeof activeDetailTab !== 'undefined' && activeDetailTab !== 'summary') {
+    switchDetailTab(activeDetailTab);   // 현재 보고 있는 세부탭을 새 fsDiv로 다시 로드
+  }
 }
 
 async function fetchAndRender() {
@@ -2719,7 +2726,9 @@ let finMode = 'quarter';      // quarter | cumulative
 let finSub = 'cf';            // bs | is | cf  (Phase1=cf만 실물)
 let detailCharts = {};        // 세부탭 차트 인스턴스
 
+let activeDetailTab = 'summary';   // 🔴 현재 활성 세부탭(연결/별도 전환 시 재로드용)
 function switchDetailTab(tab) {
+  activeDetailTab = tab;
   document.querySelectorAll('.dtab').forEach(b => b.classList.toggle('active', b.dataset.dtab === tab));
   const summary = document.getElementById('summary-wrap');
   const panel = document.getElementById('detail-panel');
