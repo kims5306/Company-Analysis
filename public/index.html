@@ -2940,6 +2940,28 @@ function finChartBaseWon(extraY) {
   } } };
   return base;
 }
+// 좌축=배수(PER·PBR 등), 우축=원(수정주가) 차트용 베이스.
+// 좌축 눈금/툴팁/밴드를 모두 소수 배수로 표시(0.73→'0.73', 반올림으로 1 뭉개짐 방지).
+function mulTick(v) {
+  const a = Math.abs(v);
+  if (a < 100) return v.toFixed(a < 10 ? 1 : 0);
+  return Math.round(v).toLocaleString('ko-KR');
+}
+function finChartBaseMul(extraY) {
+  const base = finChartBase(extraY);
+  base.scales.y.ticks.callback = mulTick;       // 좌축 = 배수
+  base.plugins.tooltip = { callbacks: { label: (c) => {
+    const v = c.parsed.y;
+    if (v == null) return `${c.dataset.label}: -`;
+    if (c.dataset.yAxisID === 'y1') {            // 우축 = 수정주가(원)
+      return `${c.dataset.label}: ${Math.round(v).toLocaleString('ko-KR')}원`;
+    }
+    // 좌축(배수): PER/PBR 본선·밴드 모두 소수 2자리(배)
+    const u = v < 100 ? v.toFixed(2) : Math.round(v).toLocaleString('ko-KR');
+    return `${c.dataset.label}: ${u}배`;
+  } } };
+  return base;
+}
 const Y1_CNT = { y1: { position:'right', ticks:{ color:'#999', callback:v=>v.toFixed(1) }, grid:{ display:false } } };
 
 // ── 재무상태표 7차트 ───────────────────────────────────
@@ -3392,14 +3414,14 @@ function renderValuation() {
   mkChart('valPerChart', 'valPer', { data: { labels, datasets: [
     { type: 'line', label: 'PER(배)', data: per, borderColor: '#ffa726', backgroundColor: 'rgba(255,167,38,.08)', borderWidth: 2, pointRadius: 2, tension: .25, fill: true, order: 1 },
     ...bandLines(per, 'rgba(255,167,38,.4)'), priceDs,
-  ]}, options: finChartBaseWon(Y1_WON) });
+  ]}, options: finChartBaseMul(Y1_WON) });
 
   // ③ PBR 밴드
   setTxt('sub-val-pbr', 'PBR = 수정주가 ÷ BPS · 밴드 = 과거 분포 25/50/75%');
   mkChart('valPbrChart', 'valPbr', { data: { labels, datasets: [
     { type: 'line', label: 'PBR(배)', data: pbr, borderColor: '#ff5b7f', backgroundColor: 'rgba(255,91,127,.08)', borderWidth: 2, pointRadius: 2, tension: .25, fill: true, order: 1 },
     ...bandLines(pbr, 'rgba(255,91,127,.4)'), priceDs,
-  ]}, options: finChartBaseWon(Y1_WON) });
+  ]}, options: finChartBaseMul(Y1_WON) });
 
   // ④ BPS
   setTxt('sub-val-bps', 'BPS = 자본총계 ÷ 상장주식수 · 우축: 수정주가');
