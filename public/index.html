@@ -779,6 +779,36 @@
     .toast.show { transform: translateX(-50%) translateY(0); }
 
     mark { background: rgba(79,127,255,0.25); color: var(--accent); border-radius: 2px; padding: 0 1px; }
+    /* ═══ ver2.0 세부정보 탭 ═══ */
+    .detail-tabbar {
+      display: flex; gap: 4px; margin-bottom: 18px;
+      border-bottom: 2px solid var(--border); flex-wrap: wrap;
+    }
+    .dtab {
+      background: none; border: none; cursor: pointer;
+      padding: 10px 18px; font-size: 15px; font-weight: 600;
+      color: var(--text-muted); border-bottom: 3px solid transparent;
+      margin-bottom: -2px; transition: all .15s;
+    }
+    .dtab:hover { color: var(--text); background: rgba(127,127,127,.06); border-radius: 8px 8px 0 0; }
+    .dtab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .fin-subtabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+    .fsub {
+      background: var(--card-bg, #1a1a2e); border: 1px solid var(--border);
+      cursor: pointer; padding: 8px 16px; font-size: 14px; font-weight: 600;
+      color: var(--text-muted); border-radius: 8px; transition: all .15s;
+    }
+    .fsub:hover { color: var(--text); }
+    .fsub.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+    .fin-mode-toggle { display: flex; align-items: center; margin-bottom: 16px; }
+    .fmode {
+      background: none; border: 1px solid var(--border); cursor: pointer;
+      padding: 5px 14px; font-size: 13px; font-weight: 600; color: var(--text-muted);
+      transition: all .15s;
+    }
+    .fmode:first-of-type { border-radius: 6px 0 0 6px; }
+    .fmode:last-of-type { border-radius: 0 6px 6px 0; border-left: none; }
+    .fmode.active { color: #fff; background: var(--accent); border-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -892,6 +922,59 @@
 
   <!-- Content -->
   <div id="an-content" style="display:none;">
+    <!-- ═══ ver2.0 세부정보 탭바 (요약화면은 그대로, 위에 얹기만) ═══ -->
+    <div class="detail-tabbar" id="detail-tabbar">
+      <button class="dtab active" data-dtab="summary" onclick="switchDetailTab('summary')">📊 요약</button>
+      <button class="dtab" data-dtab="business" onclick="switchDetailTab('business')">🏢 사업정보</button>
+      <button class="dtab" data-dtab="finance"  onclick="switchDetailTab('finance')">💰 재무정보</button>
+      <button class="dtab" data-dtab="valuation" onclick="switchDetailTab('valuation')">📈 투자지표</button>
+    </div>
+
+    <!-- ─── 세부정보 패널(요약 외 탭) — 온디맨드 로드 ─── -->
+    <div id="detail-panel" style="display:none;">
+      <!-- 재무정보 탭 -->
+      <div class="detail-pane" id="pane-finance" style="display:none;">
+        <div class="fin-subtabs">
+          <button class="fsub active" data-fsub="bs" onclick="switchFinSub('bs')">재무상태표</button>
+          <button class="fsub" data-fsub="is" onclick="switchFinSub('is')">손익계산서</button>
+          <button class="fsub" data-fsub="cf" onclick="switchFinSub('cf')">현금흐름표</button>
+        </div>
+        <div class="fin-mode-toggle" id="fin-mode-toggle">
+          <span style="font-size:13px;color:var(--text-muted);margin-right:8px;">표시 기준:</span>
+          <button class="fmode active" data-fmode="quarter" onclick="setFinMode('quarter')">분기</button>
+          <button class="fmode" data-fmode="cumulative" onclick="setFinMode('cumulative')">누적</button>
+        </div>
+        <div id="fin-loading" style="display:none;padding:40px;text-align:center;color:var(--text-muted);">📡 DART 분기 시계열 불러오는 중…</div>
+        <!-- 현금흐름표 서브탭 -->
+        <div class="fin-sub-content" id="fsub-cf" style="display:none;">
+          <div class="chart-card">
+            <div class="chart-title">현금흐름분석 (막대: FCF · 선: 영업/투자/재무 현금흐름)</div>
+            <div class="chart-sub" id="sub-cf-main"></div>
+            <div class="chart-outer">
+              <span class="y-lbl">억원</span>
+              <div class="chart-wrap"><canvas id="cfMainChart"></canvas></div>
+            </div>
+          </div>
+        </div>
+        <div class="fin-sub-content" id="fsub-bs" style="display:none;">
+          <div style="padding:30px;text-align:center;color:var(--text-muted);">재무상태표 차트는 Phase 2에서 채워집니다.</div>
+        </div>
+        <div class="fin-sub-content" id="fsub-is" style="display:none;">
+          <div style="padding:30px;text-align:center;color:var(--text-muted);">손익계산서 차트는 Phase 2에서 채워집니다.</div>
+        </div>
+      </div>
+      <!-- 사업정보 탭 -->
+      <div class="detail-pane" id="pane-business" style="display:none;">
+        <div style="padding:30px;text-align:center;color:var(--text-muted);">사업정보 탭(직원현황·AI 사업요약)은 Phase 2에서 채워집니다.</div>
+      </div>
+      <!-- 투자지표 탭 -->
+      <div class="detail-pane" id="pane-valuation" style="display:none;">
+        <div style="padding:30px;text-align:center;color:var(--text-muted);">투자지표 탭(ROE 듀퐁·PER/PBR 밴드 등)은 Phase 3에서 채워집니다.</div>
+      </div>
+    </div>
+
+    <!-- ─── 요약 화면(기존 그대로, 절대 미변경) ─── -->
+    <div id="summary-wrap">
     <div class="kpi-grid" id="kpi-grid"></div>
     <!-- 주식 실시간 KPI (현재가·기간등락률·최고가·최저가·평균거래량·외국인보유율) -->
     <div class="stock-kpi-grid" id="stock-kpi-grid" style="display:none;"></div>
@@ -1002,6 +1085,7 @@
         </div>
       </div>
     </div>
+    </div><!-- /summary-wrap -->
   </div>
 </div>
 
@@ -1133,6 +1217,12 @@ function backToReportView() { showView('reportView'); }
 async function openReportView(idx) {
   selectedCorp = resultMap[idx];
   if (!selectedCorp) return;
+  // ver2.0: 종목 바뀌면 세부탭 시계열 캐시 리셋 + 요약탭으로 복귀
+  seriesData = null; seriesLoadedFor = null;
+  if (typeof switchDetailTab === 'function') {
+    const tb = document.getElementById('detail-tabbar');
+    if (tb) switchDetailTab('summary');
+  }
 
   document.getElementById('rv-corp-name').textContent = selectedCorp.corp_name;
   document.getElementById('rv-corp-code').textContent = selectedCorp.corp_code;
@@ -2583,6 +2673,120 @@ function showToast(msg) {
   toast.textContent = msg; toast.classList.add('show');
   clearTimeout(toastT);
   toastT = setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+/* ═══════════ ver2.0 세부정보 탭 ═══════════ */
+let seriesData = null;        // financial-series 응답 캐시(현재 종목)
+let seriesLoadedFor = null;   // 어느 corp_code로 로드했는지
+let finMode = 'quarter';      // quarter | cumulative
+let finSub = 'cf';            // bs | is | cf  (Phase1=cf만 실물)
+let detailCharts = {};        // 세부탭 차트 인스턴스
+
+function switchDetailTab(tab) {
+  document.querySelectorAll('.dtab').forEach(b => b.classList.toggle('active', b.dataset.dtab === tab));
+  const summary = document.getElementById('summary-wrap');
+  const panel = document.getElementById('detail-panel');
+  if (tab === 'summary') {
+    summary.style.display = '';
+    panel.style.display = 'none';
+    return;
+  }
+  summary.style.display = 'none';
+  panel.style.display = '';
+  document.querySelectorAll('.detail-pane').forEach(p => p.style.display = 'none');
+  const pane = document.getElementById('pane-' + tab);
+  if (pane) pane.style.display = '';
+  if (tab === 'finance') { switchFinSub(finSub); loadFinanceSeries(); }
+}
+
+function switchFinSub(sub) {
+  finSub = sub;
+  document.querySelectorAll('.fsub').forEach(b => b.classList.toggle('active', b.dataset.fsub === sub));
+  document.querySelectorAll('.fin-sub-content').forEach(c => c.style.display = 'none');
+  const el = document.getElementById('fsub-' + sub);
+  if (el) el.style.display = '';
+  renderFinCharts();
+}
+
+function setFinMode(mode) {
+  finMode = mode;
+  document.querySelectorAll('.fmode').forEach(b => b.classList.toggle('active', b.dataset.fmode === mode));
+  renderFinCharts();
+}
+
+// 최근 N년 분기 시계열 온디맨드 로드(+캐싱: 같은 종목 재호출 안 함)
+async function loadFinanceSeries() {
+  if (!selectedCorp) return;
+  if (seriesLoadedFor === selectedCorp.corp_code && seriesData) { renderFinCharts(); return; }
+  const fsDiv = (typeof currentFSDiv !== 'undefined' && currentFSDiv) ? currentFSDiv : 'CFS';
+  document.getElementById('fin-loading').style.display = '';
+  document.querySelectorAll('.fin-sub-content').forEach(c => c.style.display = 'none');
+  try {
+    const r = await fetch(`/api/financial-series?corp_code=${selectedCorp.corp_code}&years=4&fs_div=${fsDiv}`);
+    seriesData = await r.json();
+    seriesLoadedFor = selectedCorp.corp_code;
+  } catch (e) {
+    document.getElementById('fin-loading').textContent = '⚠️ 시계열 로드 실패: ' + e.message;
+    return;
+  }
+  document.getElementById('fin-loading').style.display = 'none';
+  switchFinSub(finSub);
+}
+
+// 최근 12개 분기만 사용(없으면 있는 만큼)
+function recentPoints(n = 12) {
+  if (!seriesData || !Array.isArray(seriesData.points)) return [];
+  const pts = seriesData.points.filter(p => p && p.label);
+  return pts.slice(-n);
+}
+const EOK = 1e8; // 억원 환산
+
+function renderFinCharts() {
+  if (!seriesData) return;
+  if (finSub === 'cf') renderCFMain();
+}
+
+// 현금흐름분석: 막대=FCF(영업CF−CAPEX), 선=영업/투자/재무현금흐름
+function renderCFMain() {
+  const pts = recentPoints(12);
+  if (!pts.length) return;
+  const key = finMode === 'cumulative' ? 'cfC' : 'cfQ';
+  const labels = pts.map(p => p.label);
+  const g = (p, acct) => { const v = p[key] && p[key][acct]; return v == null ? null : v / EOK; };
+  const cfo = pts.map(p => g(p, '영업활동현금흐름'));
+  const cfi = pts.map(p => g(p, '투자활동현금흐름'));
+  const cff = pts.map(p => g(p, '재무활동현금흐름'));
+  const capex = pts.map(p => g(p, '유형자산의취득'));
+  const fcf = pts.map((p, i) => (cfo[i] == null || capex[i] == null) ? null : cfo[i] - capex[i]);
+
+  const ctx = document.getElementById('cfMainChart').getContext('2d');
+  if (detailCharts.cfMain) detailCharts.cfMain.destroy();
+  document.getElementById('sub-cf-main').textContent =
+    `${finMode === 'cumulative' ? '누적(YTD)' : '분기'} 기준 · 최근 ${pts.length}개 분기 · 단위 억원 · FCF = 영업CF − CAPEX`;
+  detailCharts.cfMain = new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        { type: 'bar', label: 'FCF(잉여현금흐름)', data: fcf, backgroundColor: 'rgba(79,127,255,.55)', borderColor: '#4f7fff', borderWidth: 1, order: 3 },
+        { type: 'line', label: '영업활동현금흐름', data: cfo, borderColor: '#ff5b7f', backgroundColor: 'transparent', tension: .25, borderWidth: 2, pointRadius: 2, order: 1 },
+        { type: 'line', label: '투자활동현금흐름', data: cfi, borderColor: '#ffa726', backgroundColor: 'transparent', tension: .25, borderWidth: 2, pointRadius: 2, order: 1 },
+        { type: 'line', label: '재무활동현금흐름', data: cff, borderColor: '#9ccc65', backgroundColor: 'transparent', tension: .25, borderWidth: 2, pointRadius: 2, order: 1 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#bbb', font: { size: 11 } } },
+        datalabels: { display: false },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y == null ? '-' : c.parsed.y.toLocaleString('ko-KR', { maximumFractionDigits: 0 }) + '억'}` } }
+      },
+      scales: {
+        x: { ticks: { color: '#999', font: { size: 10 } }, grid: { color: 'rgba(127,127,127,.08)' } },
+        y: { ticks: { color: '#999', callback: v => (v / 10000).toFixed(1) + '조' }, grid: { color: 'rgba(127,127,127,.08)' } }
+      }
+    }
+  });
 }
 </script>
 <!-- ── Footer ── -->

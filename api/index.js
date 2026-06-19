@@ -231,6 +231,108 @@ async function fetchCashFlow(baseParams, fsDiv) {
   } catch (e) { return []; }
 }
 
+// ──── 재무 분기 시계열 (ver2.0 세부정보 탭) ────────────────────
+// 최근 N년 × 4분기 BS/IS/CF 전체계정을 긁어 분기 연속 시계열로 가공.
+// 재무상태표·손익·현금흐름 탭의 모든 차트가 이 한 응답을 나눠 씀. 온디맨드+캐싱.
+const seriesCache = new Map();
+const SERIES_TTL = 12 * 3600 * 1000;   // 분기 확정자료라 12h 충분
+const SERIES_CACHE_MAX = 100;
+function seriesGet(key) {
+  const e = seriesCache.get(key);
+  if (!e) return null;
+  if (Date.now() - e.ts > SERIES_TTL) { seriesCache.delete(key); return null; }
+  return e.value;
+}
+function seriesSet(key, value) {
+  if (seriesCache.size >= SERIES_CACHE_MAX) seriesCache.delete(seriesCache.keys().next().value);
+  seriesCache.set(key, { ts: Date.now(), value });
+}
+// 계정명 정규화(띄어쓰기 변동 — 분기 "영업활동 현금흐름" vs 연간 "영업활동현금흐름")
+function normNm(s) { return (s || '').replace(/\s+/g, ''); }
+function toNum(s) { const n = parseFloat(String(s || '').replace(/,/g, '')); return isNaN(n) ? null : n; }
+
+// 한 보고서(분기)의 list에서 sj_div+정규화 계정명으로 분기값·누적값 둘 다 추출.
+// IS는 thstrm_amount(분기)·thstrm_add_amount(누적) 둘 다 제공. CF/BS는 thstrm_amount만.
+function pickField(list, sjDiv, accountNm) {
+  const target = normNm(accountNm);
+  const hit = (list || []).find(i => i.sj_div === sjDiv && normNm(i.account_nm) === target);
+  if (!hit) return { amt: null, add: null };
+  return { amt: toNum(hit.thstrm_amount), add: toNum(hit.thstrm_add_amount) };
+}
+
+// 재무 분기 시계열. 각 분기 포인트에 quarter(분기단독)·cumulative(누적) 둘 다 담는다.
+//  - BS: 시점값(quarter=cumulative=동일)
+//  - IS: 분기=thstrm_amount, 누적=thstrm_add_amount (4Q는 add없음→누적=연간값, 분기=연−3Q누적)
+//  - CF: thstrm_amount가 누적 → 누적=그대로, 분기=차분(2Q=반기−1Q…)
+async function fetchFinancialSeries(corpCode, years, fsDiv) {
+  const fs = fsDiv === 'OFS' ? 'OFS' : 'CFS';
+  const REPRT = [['1Q', '11013'], ['2Q', '11012'], ['3Q', '11014'], ['4Q', '11011']];
+  const now = new Date();
+  const curY = now.getFullYear();
+  const startY = curY - (years - 1);
+  const BS_ACCTS = ['자산총계','유동자산','비유동자산','부채총계','유동부채','비유동부채','자본총계','자본금','이익잉여금','유형자산','매출채권','재고자산','매입채무'];
+  const IS_ACCTS = ['매출액','매출원가','매출총이익','영업이익','당기순이익(손실)','당기순이익','법인세비용차감전순이익','판매비와관리비'];
+  const CF_ACCTS = ['영업활동현금흐름','투자활동현금흐름','재무활동현금흐름','유형자산의취득','유형자산의처분','감가상각비'];
+
+  // 보고서별 원시 수집: raw[y][q] = {bs:{acct:val}, is:{acct:{amt,add}}, cf:{acct:val}}
+  const raw = {};
+  for (let y = startY; y <= curY; y++) {
+    raw[y] = {};
+    for (const [q, rc] of REPRT) {
+      let d;
+      try { d = await fetchDartAPI({ crtfc_key: DART_API_KEY, corp_code: corpCode, bsns_year: String(y), reprt_code: rc, fs_div: fs }, 'fnlttSinglAcntAll'); }
+      catch (e) { d = null; }
+      if (!d || d.status !== '000' || !Array.isArray(d.list)) { raw[y][q] = null; continue; }
+      const bs = {}; BS_ACCTS.forEach(a => { bs[a] = pickField(d.list, 'BS', a).amt; });
+      const is = {}; IS_ACCTS.forEach(a => { is[a] = pickField(d.list, 'IS', a); });   // {amt,add}
+      const cf = {}; CF_ACCTS.forEach(a => { cf[a] = pickField(d.list, 'CF', a).amt; });
+      raw[y][q] = { bs, is, cf };
+    }
+  }
+
+  const ORDER = ['1Q', '2Q', '3Q', '4Q'];
+  const points = [];
+  for (let y = startY; y <= curY; y++) {
+    for (let qi = 0; qi < 4; qi++) {
+      const q = ORDER[qi];
+      const snap = raw[y] && raw[y][q];
+      if (!snap) continue;
+      const prev = qi === 0 ? null : (raw[y] && raw[y][ORDER[qi - 1]]);
+
+      const pt = { label: `${String(y).slice(2)}.${q.replace('Q','')}Q`, year: y, q,
+                   bs: {}, isQ: {}, isC: {}, cfQ: {}, cfC: {} };
+      // BS = 시점값
+      BS_ACCTS.forEach(a => { pt.bs[a] = snap.bs ? snap.bs[a] : null; });
+      // IS = 분기(amt)·누적(add). 4Q는 add없음 → 누적=amt(연간), 분기=연간−3Q누적
+      IS_ACCTS.forEach(a => {
+        const cur = snap.is ? snap.is[a] : null;
+        if (!cur) { pt.isQ[a] = null; pt.isC[a] = null; return; }
+        // 누적
+        if (cur.add != null) pt.isC[a] = cur.add;
+        else pt.isC[a] = cur.amt;                       // 4Q: thstrm=연간=누적
+        // 분기
+        if (cur.amt != null && cur.add != null) pt.isQ[a] = cur.amt;   // 1~3Q: thstrm=분기단독
+        else if (q === '4Q') {                                          // 4Q: 연간−3Q누적
+          const p3 = prev && prev.is && prev.is[a];
+          const prevCum = p3 ? (p3.add != null ? p3.add : p3.amt) : null;
+          pt.isQ[a] = (cur.amt != null && prevCum != null) ? cur.amt - prevCum : null;
+        } else pt.isQ[a] = cur.amt;
+      });
+      // CF = thstrm가 누적. 누적=그대로, 분기=차분
+      CF_ACCTS.forEach(a => {
+        const cur = snap.cf ? snap.cf[a] : null;
+        pt.cfC[a] = cur;                                  // 누적
+        if (cur == null) { pt.cfQ[a] = null; return; }
+        if (qi === 0) { pt.cfQ[a] = cur; return; }        // 1Q = 누적 자체
+        const prevV = prev && prev.cf ? prev.cf[a] : null;
+        pt.cfQ[a] = prevV == null ? null : cur - prevV;
+      });
+      points.push(pt);
+    }
+  }
+  return { fsDiv: fs, years, points };
+}
+
 function fetchDartList(params) {
   const qs = Object.entries(params).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
   return dartRequest({
@@ -480,6 +582,26 @@ module.exports = async (req, res) => {
       const data = await fetchDartAPI({ crtfc_key: DART_API_KEY, corp_code, bsns_year, reprt_code: reprt_code || '11011' });
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify(data));
+      return;
+    }
+
+    // ── 재무 분기 시계열 (ver2.0 세부정보 탭 — 온디맨드·캐싱)
+    if (pathname === '/api/financial-series') {
+      const { corp_code, years, fs_div } = query;
+      if (!corp_code) { res.writeHead(400); res.end(JSON.stringify({ status: 'ERR', message: 'corp_code 필수' })); return; }
+      const yN = Math.min(Math.max(parseInt(years) || 3, 1), 6);   // 1~6년, 기본 3
+      const fs = fs_div === 'OFS' ? 'OFS' : 'CFS';
+      const cacheKey = `series|${corp_code}|${yN}|${fs}`;
+      const hit = seriesGet(cacheKey);
+      if (hit) {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ...hit, cached: true }));
+        return;
+      }
+      const data = await fetchFinancialSeries(corp_code, yN, fs);
+      seriesSet(cacheKey, data);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ...data, cached: false }));
       return;
     }
 
