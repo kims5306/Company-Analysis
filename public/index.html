@@ -1003,6 +1003,10 @@
       <div class="detail-pane" id="pane-valuation" style="display:none;">
         <div id="val-loading" style="display:none;padding:40px;text-align:center;color:var(--text-muted);">📡 밸류에이션 데이터(주식수·배당·주가) 불러오는 중…</div>
         <div id="val-content" style="display:none;">
+          <div style="background:var(--card-alt,rgba(99,102,241,.08));border:1px solid var(--border,rgba(99,102,241,.25));border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.6;color:var(--text-muted);">
+            ℹ️ <b>투자지표는 모두 4분기누적(TTM) 기준</b>입니다 — 분기/누적 토글이 없는 이유.<br>
+            PER·EPS·ROE·SPS·OCFPS 등은 <b>항상 최근 12개월 실적</b>으로 계산해야 분기별로 값이 4배씩 튀거나 계절성에 왜곡되지 않습니다. BPS·PBR 등 잔고성 지표는 분기말 시점값을 그대로 씁니다.
+          </div>
           <div class="chart-card"><div class="chart-title">ROE 듀퐁분석 (ROE = 순이익률 × 총자산회전율 × 레버리지)</div><div class="chart-sub" id="sub-val-roe"></div><div class="chart-outer"><span class="y-lbl">%</span><div class="chart-wrap"><canvas id="valRoeChart"></canvas></div><span class="y-lbl">×</span></div></div>
           <div class="chart-card"><div class="chart-title">PER 밴드 (주가 ÷ EPS, 우축: 수정주가)</div><div class="chart-sub" id="sub-val-per"></div><div class="chart-outer"><span class="y-lbl">배</span><div class="chart-wrap"><canvas id="valPerChart"></canvas></div><span class="y-lbl">원</span></div></div>
           <div class="chart-card"><div class="chart-title">PBR 밴드 (주가 ÷ BPS, 우축: 수정주가)</div><div class="chart-sub" id="sub-val-pbr"></div><div class="chart-outer"><span class="y-lbl">배</span><div class="chart-wrap"><canvas id="valPbrChart"></canvas></div><span class="y-lbl">원</span></div></div>
