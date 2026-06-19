@@ -1466,6 +1466,14 @@ async function fetchAndRender() {
 
     renderAll();
     setState('content');
+    // 상단 연도/보고서 변경을 세부탭(재무정보·투자지표)에도 반영.
+    // seriesData는 corp 단위 캐시라 분기만 바뀌면 재로드 없이 차트만 다시 그린다.
+    if (typeof activeDetailTab !== 'undefined' && activeDetailTab !== 'summary') {
+      try {
+        if (activeDetailTab === 'finance' && typeof renderFinCharts === 'function') renderFinCharts();
+        else if (activeDetailTab === 'valuation' && typeof renderValuation === 'function' && seriesData) renderValuation();
+      } catch (e) { console.warn('세부탭 갱신 실패:', e.message); }
+    }
   } catch (err) {
     setState('error', err.message);
   }
@@ -2828,10 +2836,27 @@ async function loadFinanceSeries() {
   switchFinSub(finSub);
 }
 
-// 최근 12개 분기만 사용(없으면 있는 만큼)
+// 상단 보고서 셀렉터(an-reprt) → 분기 매핑. 세부탭 시계열의 '종점'을 선택분기에 맞춤.
+const REPRT_TO_Q = { '11013': '1Q', '11012': '2Q', '11014': '3Q', '11011': '4Q' };
+function selectedEndQuarter() {
+  const yEl = document.getElementById('an-year');
+  const rEl = document.getElementById('an-reprt');
+  if (!yEl || !rEl) return null;
+  const year = parseInt(yEl.value, 10);
+  const q = REPRT_TO_Q[rEl.value];
+  if (!year || !q) return null;
+  return { year, q };
+}
+// 최근 n개 분기(기본 12). 상단에서 선택한 분기를 '종점'으로 사용(없거나 못찾으면 최신 기준).
+// 회사 무관 일반 로직 — 선택 분기 이하의 마지막 n개를 그린다.
 function recentPoints(n = 12) {
   if (!seriesData || !Array.isArray(seriesData.points)) return [];
   const pts = seriesData.points.filter(p => p && p.label);
+  const sel = selectedEndQuarter();
+  if (sel) {
+    const idx = pts.findIndex(p => p.year === sel.year && p.q === sel.q);
+    if (idx >= 0) return pts.slice(Math.max(0, idx - n + 1), idx + 1);
+  }
   return pts.slice(-n);
 }
 const EOK = 1e8; // 억원 환산
