@@ -777,8 +777,65 @@
     }
 
     .toast.show { transform: translateX(-50%) translateY(0); }
+    /* 빈 토스트(텍스트 없음)는 절대 표시 안 함 — 비교뷰 잔상 방어 */
+    .toast:empty { display: none !important; }
 
     mark { background: rgba(79,127,255,0.25); color: var(--accent); border-radius: 2px; padding: 0 1px; }
+    /* ═══ ver2.0 기업비교 (Compare) — 격리 스타일, .cmp- 프리픽스 ═══ */
+    .cmp-bar {
+      position: sticky; top: 0; z-index: 30; display: none;
+      align-items: center; gap: 10px; flex-wrap: wrap;
+      background: var(--surface2); border: 1px solid var(--accent);
+      border-radius: var(--radius); padding: 10px 14px; margin-bottom: 16px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.25);
+    }
+    .cmp-bar.visible { display: flex; }
+    .cmp-bar-label { font-size: 13px; color: var(--text-muted); font-weight: 600; }
+    .cmp-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 4px 6px 4px 12px; font-size: 13px; color: var(--text);
+    }
+    .cmp-chip .x { cursor: pointer; color: var(--text-muted); font-weight: 700;
+      width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; }
+    .cmp-chip .x:hover { background: var(--red, #ef5350); color: #fff; }
+    .cmp-go {
+      margin-left: auto; background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff; border: none; border-radius: 8px; padding: 8px 18px;
+      font-size: 14px; font-weight: 700; cursor: pointer; transition: opacity .15s;
+    }
+    .cmp-go:disabled { opacity: .4; cursor: not-allowed; }
+    .cmp-clear { background: none; border: 1px solid var(--border); color: var(--text-muted);
+      border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; }
+    .cmp-clear:hover { border-color: var(--accent); color: var(--accent); }
+    .compare-add-btn {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 6px 12px; color: var(--text-muted); font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .compare-add-btn:hover { border-color: var(--accent2); color: var(--accent2); background: rgba(124,92,252,.08); }
+    .compare-add-btn.added { border-color: var(--accent2); color: var(--accent2); background: rgba(124,92,252,.14); }
+    #compareView { max-width: 1200px; margin: 0 auto; padding: 28px 24px 80px; }
+    .cmp-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+    .cmp-head h2 { font-size: 22px; font-weight: 800; }
+    .cmp-sub { color: var(--text-muted); font-size: 13px; margin-bottom: 20px; }
+    .cmp-presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+    .cmp-preset { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 7px 14px; color: var(--text-muted); font-size: 13px; cursor: pointer; transition: all .15s; }
+    .cmp-preset:hover { border-color: var(--accent); color: var(--accent); background: rgba(79,127,255,.08); }
+    .cmp-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+    .cmp-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 520px; }
+    .cmp-table th, .cmp-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+    .cmp-table thead th { background: var(--surface2); color: var(--text); font-weight: 700; position: sticky; top: 0; }
+    .cmp-table thead th:first-child, .cmp-table td:first-child { text-align: left; color: var(--text-muted); font-weight: 600; }
+    .cmp-table tbody tr:hover td { background: rgba(79,127,255,0.04); }
+    .cmp-table tbody tr:last-child td { border-bottom: none; }
+    .cmp-table .corp-h { color: var(--accent); font-weight: 800; }
+    .cmp-table .corp-h small { display: block; color: var(--text-muted); font-weight: 500; font-size: 11px; margin-top: 2px; }
+    .cmp-cell-best { color: #9ccc65; font-weight: 700; }
+    .cmp-cell-worst { color: #ef5350; }
+    .cmp-sect-row td { background: rgba(127,127,127,.05); color: var(--text-muted); font-size: 12px; font-weight: 700; letter-spacing: .5px; text-align: left; }
+    .cmp-loading { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 60px; color: var(--text-muted); }
     /* ═══ ver2.0 세부정보 탭 ═══ */
     .detail-tabbar {
       display: flex; gap: 4px; margin-bottom: 18px;
@@ -846,7 +903,24 @@
     </div>
 
     <div class="status-bar" id="statusBar"></div>
+    <!-- ver2.0 기업비교: 담은 종목 바(2개 이상 모이면 비교하기 활성) -->
+    <div class="cmp-bar" id="cmpBar">
+      <span class="cmp-bar-label">📊 비교함</span>
+      <span id="cmpChips"></span>
+      <button class="cmp-clear" onclick="clearCompare()">비우기</button>
+      <button class="cmp-go" id="cmpGo" onclick="openCompareView()" disabled>비교하기</button>
+    </div>
     <div class="results-grid" id="resultsGrid"></div>
+  </div>
+</div>
+
+<!-- ────── Compare View (ver2.0 기업비교) ────── -->
+<div id="compareView" style="display:none;">
+  <button class="back-btn" onclick="backToSearch()">← 검색으로</button>
+  <div class="cmp-head"><h2>📊 기업 비교</h2></div>
+  <div class="cmp-sub" id="cmp-sub">최신 분기 기준 · 연결(CFS) · 규모 차가 큰 종목은 비율지표로 비교하세요</div>
+  <div id="cmp-body">
+    <div class="cmp-loading"><div class="spinner"></div>재무 시계열을 불러오는 중...</div>
   </div>
 </div>
 
@@ -1226,6 +1300,7 @@ function renderResults({ total, results }, q) {
     const stockHtml = c.stock_code && c.stock_code.trim()
       ? `<span class="stock-badge">${hl(c.stock_code, q)}</span>`
       : `<span class="no-stock">비상장</span>`;
+    const added = cmpHas(c.corp_code);
     return `
       <div class="result-card">
         <div class="card-main">
@@ -1237,6 +1312,7 @@ function renderResults({ total, results }, q) {
             ${hl(c.corp_code, q)}
           </span>
           ${stockHtml}
+          <button class="compare-add-btn${added ? ' added' : ''}" data-cc="${c.corp_code}" onclick="toggleCompare(${i},event)">${added ? '✓ 담김' : '+ 비교'}</button>
           <button class="analyze-btn" onclick="openReportView(${i})">📋 공시 보고서</button>
         </div>
       </div>`;
@@ -1250,7 +1326,7 @@ function copyCode(code, e) {
 
 // ──── View helpers ────
 function showView(id) {
-  ['searchView', 'reportView', 'analysisView'].forEach(v => {
+  ['searchView', 'reportView', 'analysisView', 'compareView'].forEach(v => {
     document.getElementById(v).style.display = v === id ? 'block' : 'none';
   });
   window.scrollTo(0, 0);
@@ -1258,6 +1334,190 @@ function showView(id) {
 
 function backToSearch()     { showView('searchView'); }
 function backToReportView() { showView('reportView'); }
+
+// ════════ ver2.0 기업비교 (Compare) — 격리 모듈 ════════
+// 검색 카드에서 종목을 담고(최대 4), 비교뷰에서 financial-series N개를 병렬로 받아
+// 최신 분기 기준 스냅샷 표를 그린다. 백엔드 추가 작업 0(기존 엔드포인트 재사용).
+let cmpList = [];                 // [{corp_code, corp_name, stock_code}]
+const CMP_MAX = 4;
+const cmpSeriesCache = {};        // corp_code → financial-series 응답(세션 캐시)
+
+function cmpHas(cc) { return cmpList.some(c => c.corp_code === cc); }
+
+function toggleCompare(idx, e) {
+  if (e) e.stopPropagation();
+  const c = resultMap[idx];
+  if (!c) return;
+  if (cmpHas(c.corp_code)) {
+    cmpList = cmpList.filter(x => x.corp_code !== c.corp_code);
+  } else {
+    if (cmpList.length >= CMP_MAX) { showToast(`최대 ${CMP_MAX}개까지 비교할 수 있어요`); return; }
+    cmpList.push({ corp_code: c.corp_code, corp_name: c.corp_name, stock_code: c.stock_code || '' });
+  }
+  renderCmpBar();
+  syncCmpButtons();
+}
+
+function removeCompare(cc) {
+  cmpList = cmpList.filter(x => x.corp_code !== cc);
+  renderCmpBar(); syncCmpButtons();
+}
+function clearCompare() { cmpList = []; renderCmpBar(); syncCmpButtons(); }
+
+// 카드 버튼 상태 동기화(재검색 없이 즉시 반영)
+function syncCmpButtons() {
+  document.querySelectorAll('.compare-add-btn').forEach(btn => {
+    const cc = btn.getAttribute('data-cc');
+    const on = cmpHas(cc);
+    btn.classList.toggle('added', on);
+    btn.textContent = on ? '✓ 담김' : '+ 비교';
+  });
+}
+
+function renderCmpBar() {
+  const bar = document.getElementById('cmpBar');
+  const chips = document.getElementById('cmpChips');
+  const go = document.getElementById('cmpGo');
+  if (!cmpList.length) { bar.classList.remove('visible'); return; }
+  bar.classList.add('visible');
+  chips.innerHTML = cmpList.map(c =>
+    `<span class="cmp-chip">${esc(c.corp_name)}<span class="x" onclick="removeCompare('${c.corp_code}')">✕</span></span>`
+  ).join('');
+  go.disabled = cmpList.length < 2;
+  go.textContent = `비교하기 (${cmpList.length})`;
+}
+
+// ── 비교뷰: financial-series N개 병렬 로드 → 스냅샷 표 ──
+async function openCompareView() {
+  if (cmpList.length < 2) return;
+  showView('compareView');
+  const body = document.getElementById('cmp-body');
+  body.innerHTML = `<div class="cmp-loading"><div class="spinner"></div>${cmpList.length}개 기업 재무 시계열을 불러오는 중...</div>`;
+  document.getElementById('cmp-sub').textContent =
+    `최신 분기(TTM) 기준 · 연결(CFS) · 규모 차가 큰 종목은 비율지표(영업이익률·ROE·부채비율)로 비교하세요`;
+
+  try {
+    const targets = cmpList.slice();   // 로드 시점 고정
+    const datas = await Promise.all(targets.map(async c => {
+      if (cmpSeriesCache[c.corp_code]) return cmpSeriesCache[c.corp_code];
+      const r = await fetch(`/api/financial-series?corp_code=${c.corp_code}&years=12&fs_div=CFS`);
+      const j = await r.json();
+      cmpSeriesCache[c.corp_code] = j;
+      return j;
+    }));
+    const cols = targets.map((c, i) => ({ corp: c, metrics: cmpComputeMetrics(datas[i]) }));
+    renderCompareTable(cols);
+  } catch (err) {
+    body.innerHTML = `<div class="cmp-loading">⚠️ 비교 데이터 로드 실패: ${esc(err.message)}</div>`;
+  }
+}
+
+// financial-series 응답 → 최신 분기 기준 비교지표(순수함수, 전역 seriesData 미사용)
+function cmpComputeMetrics(data) {
+  const out = { label: '-', revenue: null, opProfit: null, netInc: null,
+    assets: null, liab: null, equity: null, fcf: null,
+    opMargin: null, netMargin: null, roe: null, debtRatio: null, currentRatio: null };
+  if (!data || !Array.isArray(data.points)) return out;
+  const pts = data.points.filter(p => p && p.label && p.bs);
+  if (!pts.length) return out;
+  // 데이터 있는 가장 최신 분기(자산총계 기준)를 앵커로
+  let idx = -1;
+  for (let i = pts.length - 1; i >= 0; i--) {
+    if (pts[i].bs && pts[i].bs['자산총계'] != null) { idx = i; break; }
+  }
+  if (idx < 0) idx = pts.length - 1;
+  const p = pts[idx];
+  out.label = p.label;
+  const EOK = 1e8;
+  // BS 시점값
+  const bs = (a) => { const v = p.bs && p.bs[a]; return v == null ? null : v; };
+  out.assets = bs('자산총계'); out.liab = bs('부채총계'); out.equity = bs('자본총계');
+  const curAsset = bs('유동자산'), curLiab = bs('유동부채');
+  // TTM(IS): 최근 4분기 isQ 합
+  const isTTM = (a) => {
+    if (idx < 3) return null;
+    let s = 0; for (let k = idx - 3; k <= idx; k++) { const v = pts[k].isQ && pts[k].isQ[a]; if (v == null) return null; s += v; } return s;
+  };
+  const niQ = (pt) => { const v0 = pt.isQ && pt.isQ._ni; if (v0 != null) return v0;
+    for (const k of ['당기순이익(손실)','분기순이익(손실)','반기순이익(손실)','당기순이익','분기순이익','반기순이익']) { const v = pt.isQ && pt.isQ[k]; if (v != null) return v; } return null; };
+  const niTTM = () => { if (idx < 3) return null; let s = 0; for (let k = idx - 3; k <= idx; k++) { const v = niQ(pts[k]); if (v == null) return null; s += v; } return s; };
+  // TTM(CF): 누적 기반(분기 차분 깨짐에 강함) — cfC[idx] + (작년말 − 작년동분기)
+  const cfIdx = {}; pts.forEach(x => { if (x && x.q != null) cfIdx[`${x.year}|${x.q}`] = x; });
+  const cfTTM = (a) => {
+    const cur = p.cfC ? p.cfC[a] : null; if (cur == null) return null;
+    const ye = cfIdx[`${p.year-1}|4Q`], ps = cfIdx[`${p.year-1}|${p.q}`];
+    if (!ye || !ps) return null;
+    const yev = ye.cfC ? ye.cfC[a] : null, psv = ps.cfC ? ps.cfC[a] : null;
+    if (yev == null || psv == null) return null;
+    return cur + (yev - psv);
+  };
+  out.revenue = isTTM('매출액'); out.opProfit = isTTM('영업이익'); out.netInc = niTTM();
+  const ocf = cfTTM('영업활동현금흐름'), capex = cfTTM('유형자산의취득');
+  out.fcf = (ocf != null && capex != null) ? (ocf - capex) : null;
+  // 비율
+  const pct = (n, d) => (n != null && d != null && d !== 0) ? (n / d * 100) : null;
+  out.opMargin = pct(out.opProfit, out.revenue);
+  out.netMargin = pct(out.netInc, out.revenue);
+  out.roe = pct(out.netInc, out.equity);
+  out.debtRatio = pct(out.liab, out.equity);
+  out.currentRatio = pct(curAsset, curLiab);
+  return out;
+}
+
+function renderCompareTable(cols) {
+  const fmtEokC = (v) => { if (v == null) return '-'; const a = Math.abs(v / 1e8);
+    if (a >= 10000) return (v / 1e12).toLocaleString('ko-KR',{maximumFractionDigits:2}) + '조';
+    return (v / 1e8).toLocaleString('ko-KR',{maximumFractionDigits:0}) + '억'; };
+  const fmtPct = (v) => v == null ? '-' : v.toLocaleString('ko-KR',{maximumFractionDigits:1}) + '%';
+  // 행 정의: [라벨, key, 포맷, higherIsBetter(null=하이라이트 없음)]
+  const ROWS = [
+    ['__sect','규모 (TTM·시점)'],
+    ['매출액 (TTM)','revenue',fmtEokC,null],
+    ['영업이익 (TTM)','opProfit',fmtEokC,true],
+    ['순이익 (TTM)','netInc',fmtEokC,true],
+    ['FCF (TTM)','fcf',fmtEokC,true],
+    ['자산총계','assets',fmtEokC,null],
+    ['부채총계','liab',fmtEokC,null],
+    ['자본총계','equity',fmtEokC,null],
+    ['__sect','수익성·안정성 (규모 무관 비교)'],
+    ['영업이익률','opMargin',fmtPct,true],
+    ['순이익률','netMargin',fmtPct,true],
+    ['ROE','roe',fmtPct,true],
+    ['부채비율','debtRatio',fmtPct,false],
+    ['유동비율','currentRatio',fmtPct,true],
+  ];
+  const head = `<tr><th>지표</th>${cols.map(c =>
+    `<th class="corp-h">${esc(c.corp.corp_name)}<small>${c.corp.stock_code ? esc(c.corp.stock_code)+' · ' : ''}${c.metrics.label}</small></th>`
+  ).join('')}</tr>`;
+  const rows = ROWS.map(r => {
+    if (r[0] === '__sect') return `<tr class="cmp-sect-row"><td colspan="${cols.length+1}">${r[1]}</td></tr>`;
+    const [label, key, fmt, hib] = r;
+    const vals = cols.map(c => c.metrics[key]);
+    let bestI = -1, worstI = -1;
+    if (hib !== null) {
+      const valid = vals.map((v,i)=>({v,i})).filter(o => o.v != null);
+      if (valid.length >= 2) {
+        const sorted = valid.slice().sort((a,b)=> hib ? b.v - a.v : a.v - b.v);
+        // 전부 같은 값이면 우열이 없으니 하이라이트 생략
+        if (sorted[0].v !== sorted[sorted.length-1].v) {
+          bestI = sorted[0].i; worstI = sorted[sorted.length-1].i;
+        }
+      }
+    }
+    const tds = vals.map((v,i) => {
+      let cls = '';
+      if (i === bestI) cls = ' class="cmp-cell-best"';
+      else if (i === worstI) cls = ' class="cmp-cell-worst"';
+      return `<td${cls}>${fmt(v)}</td>`;
+    }).join('');
+    return `<tr><td>${label}</td>${tds}</tr>`;
+  }).join('');
+  document.getElementById('cmp-body').innerHTML =
+    `<div class="cmp-table-wrap"><table class="cmp-table"><thead>${head}</thead><tbody>${rows}</tbody></table></div>
+     <p style="color:var(--text-muted);font-size:12px;margin-top:12px;">
+       · <span style="color:#9ccc65;font-weight:700;">초록</span>=해당 지표 최우수, <span style="color:#ef5350;">빨강</span>=최하위 (규모 행은 단순 크기라 하이라이트 없음).
+       부채비율은 낮을수록 우수. · TTM=최근 4분기 합(계절성 제거). · 출처: DART 공시(연결).</p>`;
+}
 
 // ──── Report View ────
 async function openReportView(idx) {
