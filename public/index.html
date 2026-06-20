@@ -836,6 +836,20 @@
     .cmp-cell-worst { color: #ef5350; }
     .cmp-sect-row td { background: rgba(127,127,127,.05); color: var(--text-muted); font-size: 12px; font-weight: 700; letter-spacing: .5px; text-align: left; }
     .cmp-loading { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 60px; color: var(--text-muted); }
+    /* ── 기업비교 C2: 서브탭(표/추이) + 추이차트 툴바 ── */
+    .cmp-subtabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 2px solid var(--border); }
+    .cmp-subtab { background: none; border: none; padding: 9px 18px; color: var(--text-muted);
+      font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .15s; }
+    .cmp-subtab:hover { color: var(--text); }
+    .cmp-subtab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .cmp-trend-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .cmp-trend-toolbar select { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 12px; color: var(--text); font-size: 13px; cursor: pointer; }
+    .cmp-rebase { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13px; cursor: pointer; user-select: none; }
+    .cmp-rebase input { cursor: pointer; }
+    .cmp-chart-box { border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; background: var(--surface); }
+    .cmp-chart-box canvas { max-height: 420px; }
+    .cmp-trend-note { color: var(--text-muted); font-size: 12px; margin-top: 12px; }
     /* ═══ ver2.0 세부정보 탭 ═══ */
     .detail-tabbar {
       display: flex; gap: 4px; margin-bottom: 18px;
@@ -1341,6 +1355,12 @@ function backToReportView() { showView('reportView'); }
 let cmpList = [];                 // [{corp_code, corp_name, stock_code}]
 const CMP_MAX = 4;
 const cmpSeriesCache = {};        // corp_code → financial-series 응답(세션 캐시)
+let cmpCols = [];                 // [{corp, data, metrics}] 비교뷰 로드시점 고정
+let cmpSub = 'table';             // table | trend (서브탭)
+let cmpTrendChart = null;         // 추이차트 Chart 인스턴스
+let cmpTrendMetric = 'revenue';   // 추이차트 선택 지표
+let cmpRebase = false;            // 절대액 리베이스(기준=100) 토글
+const CMP_COLORS = ['#4f7fff','#ef5350','#9ccc65','#ffa726']; // 종목별 색(최대4)
 
 function cmpHas(cc) { return cmpList.some(c => c.corp_code === cc); }
 
@@ -1405,11 +1425,29 @@ async function openCompareView() {
       cmpSeriesCache[c.corp_code] = j;
       return j;
     }));
-    const cols = targets.map((c, i) => ({ corp: c, metrics: cmpComputeMetrics(datas[i]) }));
-    renderCompareTable(cols);
+    cmpCols = targets.map((c, i) => ({ corp: c, data: datas[i], metrics: cmpComputeMetrics(datas[i]) }));
+    // 서브탭 셸 + 콘텐츠 컨테이너 (표 디폴트)
+    body.innerHTML =
+      `<div class="cmp-subtabs">
+         <button class="cmp-subtab active" id="cmpSubTable" onclick="cmpSwitchSub('table')">📋 스냅샷 표</button>
+         <button class="cmp-subtab" id="cmpSubTrend" onclick="cmpSwitchSub('trend')">📈 추이 차트</button>
+       </div>
+       <div id="cmp-sub-body"></div>`;
+    cmpSub = 'table';
+    renderCompareTable(cmpCols);
   } catch (err) {
     body.innerHTML = `<div class="cmp-loading">⚠️ 비교 데이터 로드 실패: ${esc(err.message)}</div>`;
   }
+}
+
+// 표 ↔ 추이 서브탭 전환
+function cmpSwitchSub(which) {
+  if (cmpSub === which) return;
+  cmpSub = which;
+  document.getElementById('cmpSubTable').classList.toggle('active', which === 'table');
+  document.getElementById('cmpSubTrend').classList.toggle('active', which === 'trend');
+  if (which === 'table') { if (cmpTrendChart) { cmpTrendChart.destroy(); cmpTrendChart = null; } renderCompareTable(cmpCols); }
+  else renderCompareTrend();
 }
 
 // financial-series 응답 → 최신 분기 기준 비교지표(순수함수, 전역 seriesData 미사용)
@@ -1512,14 +1550,169 @@ function renderCompareTable(cols) {
     }).join('');
     return `<tr><td>${label}</td>${tds}</tr>`;
   }).join('');
-  document.getElementById('cmp-body').innerHTML =
+  document.getElementById('cmp-sub-body').innerHTML =
     `<div class="cmp-table-wrap"><table class="cmp-table"><thead>${head}</thead><tbody>${rows}</tbody></table></div>
      <p style="color:var(--text-muted);font-size:12px;margin-top:12px;">
        · <span style="color:#9ccc65;font-weight:700;">초록</span>=해당 지표 최우수, <span style="color:#ef5350;">빨강</span>=최하위 (규모 행은 단순 크기라 하이라이트 없음).
        부채비율은 낮을수록 우수. · TTM=최근 4분기 합(계절성 제거). · 출처: DART 공시(연결).</p>`;
 }
 
-// ──── Report View ────
+// ──── 기업비교 추이 차트(C2) ────
+// 지표 정의: kind 'abs'(절대액·리베이스 대상) | 'pct'(비율·리베이스 안함)
+//            series(data,labels) → 분기별 값 배열(라벨과 1:1, 없으면 null)
+const CMP_TREND_METRICS = [
+  { key:'revenue',     name:'매출액 (TTM)',   kind:'abs', calc:(d)=>cmpTtmSeries(d,'is','매출액') },
+  { key:'opProfit',    name:'영업이익 (TTM)', kind:'abs', calc:(d)=>cmpTtmSeries(d,'is','영업이익') },
+  { key:'netInc',      name:'순이익 (TTM)',   kind:'abs', calc:(d)=>cmpTtmSeries(d,'ni') },
+  { key:'fcf',         name:'FCF (TTM)',      kind:'abs', calc:(d)=>cmpFcfSeries(d) },
+  { key:'assets',      name:'자산총계',       kind:'abs', calc:(d)=>cmpBsSeries(d,'자산총계') },
+  { key:'equity',      name:'자본총계',       kind:'abs', calc:(d)=>cmpBsSeries(d,'자본총계') },
+  { key:'opMargin',    name:'영업이익률',     kind:'pct', calc:(d)=>cmpRatioSeries(d,'opMargin') },
+  { key:'netMargin',   name:'순이익률',       kind:'pct', calc:(d)=>cmpRatioSeries(d,'netMargin') },
+  { key:'roe',         name:'ROE',            kind:'pct', calc:(d)=>cmpRatioSeries(d,'roe') },
+  { key:'debtRatio',   name:'부채비율',       kind:'pct', calc:(d)=>cmpRatioSeries(d,'debtRatio') },
+  { key:'currentRatio',name:'유동비율',       kind:'pct', calc:(d)=>cmpRatioSeries(d,'currentRatio') },
+];
+
+// 공통 분기 라벨축(union) — 종목마다 시작분기 달라도 한 축에 정렬. 최근 12개로 제한.
+function cmpUnionLabels() {
+  const set = new Set();
+  cmpCols.forEach(col => {
+    const pts = (col.data && Array.isArray(col.data.points)) ? col.data.points : [];
+    pts.forEach(p => { if (p && p.label) set.add(p.label); });
+  });
+  const order = (lb) => { const m = /^(\d+)\.(\d)Q$/.exec(lb); return m ? (+m[1])*4 + (+m[2]) : 0; };
+  return Array.from(set).sort((a,b)=>order(a)-order(b)).slice(-12);
+}
+
+// 해당 종목 data의 label→point 인덱스
+function cmpPtMap(d) {
+  const m = {}; const pts = (d && Array.isArray(d.points)) ? d.points : [];
+  pts.forEach((p,i)=>{ if (p && p.label) m[p.label] = i; }); return { m, pts };
+}
+
+// TTM(IS) 시계열: 각 분기 앵커로 최근 4분기 isQ 합
+function cmpTtmSeries(d, kind, acct) {
+  const { m, pts } = cmpPtMap(d);
+  const niQ = (pt) => { const v0 = pt.isQ && pt.isQ._ni; if (v0 != null) return v0;
+    for (const k of ['당기순이익(손실)','분기순이익(손실)','반기순이익(손실)','당기순이익','분기순이익','반기순이익']) { const v = pt.isQ && pt.isQ[k]; if (v != null) return v; } return null; };
+  return cmpUnionLabels().map(lb => {
+    const idx = m[lb]; if (idx == null || idx < 3) return null;
+    let s = 0;
+    for (let k = idx-3; k <= idx; k++) {
+      const v = kind === 'ni' ? niQ(pts[k]) : (pts[k].isQ && pts[k].isQ[acct]);
+      if (v == null) return null; s += v;
+    }
+    return s;
+  });
+}
+
+// FCF(TTM): 누적 기반(분기차분 깨짐에 강함) = cfC[idx] + (작년말 − 작년동분기), 영업CF − CAPEX
+function cmpFcfSeries(d) {
+  const { m, pts } = cmpPtMap(d);
+  const cfIdx = {}; pts.forEach(x => { if (x && x.q != null) cfIdx[`${x.year}|${x.q}`] = x; });
+  const ttm = (p, acct) => {
+    const cur = p.cfC ? p.cfC[acct] : null; if (cur == null) return null;
+    const ye = cfIdx[`${p.year-1}|4Q`], ps = cfIdx[`${p.year-1}|${p.q}`];
+    if (!ye || !ps) return null;
+    const yev = ye.cfC ? ye.cfC[acct] : null, psv = ps.cfC ? ps.cfC[acct] : null;
+    if (yev == null || psv == null) return null;
+    return cur + (yev - psv);
+  };
+  return cmpUnionLabels().map(lb => {
+    const idx = m[lb]; if (idx == null) return null;
+    const ocf = ttm(pts[idx], '영업활동현금흐름'), capex = ttm(pts[idx], '유형자산의취득');
+    return (ocf != null && capex != null) ? (ocf - capex) : null;
+  });
+}
+
+// BS 시점값 시계열
+function cmpBsSeries(d, acct) {
+  const { m, pts } = cmpPtMap(d);
+  return cmpUnionLabels().map(lb => { const idx = m[lb]; if (idx == null) return null;
+    const v = pts[idx].bs && pts[idx].bs[acct]; return v == null ? null : v; });
+}
+
+// 비율 시계열(TTM 손익 ÷ 시점 BS)
+function cmpRatioSeries(d, which) {
+  const labels = cmpUnionLabels();
+  const rev = cmpTtmSeries(d,'is','매출액'), op = cmpTtmSeries(d,'is','영업이익'), ni = cmpTtmSeries(d,'ni');
+  const eq = cmpBsSeries(d,'자본총계'), li = cmpBsSeries(d,'부채총계');
+  const ca = cmpBsSeries(d,'유동자산'), cl = cmpBsSeries(d,'유동부채');
+  const pct = (n,den) => (n!=null && den!=null && den!==0) ? (n/den*100) : null;
+  return labels.map((_,i) => {
+    if (which==='opMargin')     return pct(op[i], rev[i]);
+    if (which==='netMargin')    return pct(ni[i], rev[i]);
+    if (which==='roe')          return pct(ni[i], eq[i]);
+    if (which==='debtRatio')    return pct(li[i], eq[i]);
+    if (which==='currentRatio') return pct(ca[i], cl[i]);
+    return null;
+  });
+}
+
+// 리베이스(기준=100): 첫 유효값 기준 상대지수
+function cmpRebaseArr(arr) {
+  const base = arr.find(v => v != null && v !== 0);
+  if (base == null) return arr.map(()=>null);
+  return arr.map(v => v == null ? null : (v / base * 100));
+}
+
+function renderCompareTrend() {
+  const sub = document.getElementById('cmp-sub-body');
+  const def = CMP_TREND_METRICS.find(x => x.key === cmpTrendMetric) || CMP_TREND_METRICS[0];
+  const isAbs = def.kind === 'abs';
+  const opts = CMP_TREND_METRICS.map(x =>
+    `<option value="${x.key}"${x.key===cmpTrendMetric?' selected':''}>${x.name}</option>`).join('');
+  sub.innerHTML =
+    `<div class="cmp-trend-toolbar">
+       <select id="cmpTrendSel" onchange="cmpTrendMetric=this.value;renderCompareTrend()">${opts}</select>
+       ${isAbs ? `<label class="cmp-rebase"><input type="checkbox" id="cmpRebaseChk" ${cmpRebase?'checked':''}
+          onchange="cmpRebase=this.checked;renderCompareTrend()"> 리베이스(기준=100, 규모차 큰 종목 비교)</label>` : ''}
+     </div>
+     <div class="cmp-chart-box"><canvas id="cmpTrendCanvas"></canvas></div>
+     <p class="cmp-trend-note">· 12분기 시계열을 종목별 라인으로 겹쳐 비교. ${isAbs
+        ? (cmpRebase ? '리베이스 ON: 첫 분기=100 기준 상대 추이(규모 무관 성장 비교).' : '절대액(조·억). 규모차 크면 리베이스 권장.')
+        : '비율지표(%)는 규모 무관이라 그대로 겹침.'} · TTM 기준 · 출처: DART 공시(연결).</p>`;
+
+  const labels = cmpUnionLabels();
+  const datasets = cmpCols.map((col, ci) => {
+    let arr = def.calc(col.data);
+    if (isAbs && cmpRebase) arr = cmpRebaseArr(arr);
+    const color = CMP_COLORS[ci % CMP_COLORS.length];
+    return { label: col.corp.corp_name, data: arr, borderColor: color, backgroundColor: color,
+      borderWidth: 2, pointRadius: 2, pointHoverRadius: 5, tension: 0.25, spanGaps: true };
+  });
+
+  const unit = isAbs && !cmpRebase;
+  const fmtV = (v) => {
+    if (v == null) return '-';
+    if (!isAbs) return v.toLocaleString('ko-KR',{maximumFractionDigits:1}) + '%';
+    if (cmpRebase) return v.toLocaleString('ko-KR',{maximumFractionDigits:1});
+    const a = Math.abs(v/1e8);
+    return a >= 10000 ? (v/1e12).toLocaleString('ko-KR',{maximumFractionDigits:2})+'조'
+                      : (v/1e8).toLocaleString('ko-KR',{maximumFractionDigits:0})+'억';
+  };
+  if (cmpTrendChart) cmpTrendChart.destroy();
+  const ctx = document.getElementById('cmpTrendCanvas').getContext('2d');
+  cmpTrendChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#c9d1d9', usePointStyle: true, boxWidth: 8 } },
+        datalabels: { display: false },
+        tooltip: { callbacks: { label: (c)=>` ${c.dataset.label}: ${fmtV(c.parsed.y)}` } }
+      },
+      scales: {
+        x: { ticks: { color: '#8b949e', maxRotation: 0, autoSkip: true }, grid: { color: 'rgba(127,127,127,.08)' } },
+        y: { ticks: { color: '#8b949e', callback: (v)=>fmtV(v) }, grid: { color: 'rgba(127,127,127,.1)' } }
+      }
+    }
+  });
+}
+
+
 async function openReportView(idx) {
   selectedCorp = resultMap[idx];
   if (!selectedCorp) return;
