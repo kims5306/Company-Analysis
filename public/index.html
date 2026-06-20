@@ -820,6 +820,8 @@
     .cmp-head h2 { font-size: 22px; font-weight: 800; }
     .cmp-sub { color: var(--text-muted); font-size: 13px; margin-bottom: 20px; }
     .cmp-presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+    .cmp-preset-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 14px; }
+    .cmp-preset-label { font-size: 13px; color: var(--text-muted); font-weight: 600; }
     .cmp-preset { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
       padding: 7px 14px; color: var(--text-muted); font-size: 13px; cursor: pointer; transition: all .15s; }
     .cmp-preset:hover { border-color: var(--accent); color: var(--accent); background: rgba(79,127,255,.08); }
@@ -917,6 +919,11 @@
     </div>
 
     <div class="status-bar" id="statusBar"></div>
+    <!-- ver2.0 기업비교 C3: 단골조합 원클릭 프리셋 -->
+    <div class="cmp-preset-bar" id="cmpPresetBar">
+      <span class="cmp-preset-label">⚡ 빠른 비교</span>
+      <button class="cmp-preset" onclick="cmpLoadPreset('textile')">🧵 섬유 4개사</button>
+    </div>
     <!-- ver2.0 기업비교: 담은 종목 바(2개 이상 모이면 비교하기 활성) -->
     <div class="cmp-bar" id="cmpBar">
       <span class="cmp-bar-label">📊 비교함</span>
@@ -1383,6 +1390,24 @@ function removeCompare(cc) {
   renderCmpBar(); syncCmpButtons();
 }
 function clearCompare() { cmpList = []; renderCmpBar(); syncCmpButtons(); }
+
+// C3: 단골조합 프리셋 — cmpList 채우고 바로 비교뷰 오픈(원클릭)
+const CMP_PRESETS = {
+  textile: { name: '섬유 4개사', corps: [
+    { corp_code: '00118345', corp_name: '디아이동일', stock_code: '001530' },
+    { corp_code: '00146269', corp_name: '일신방직',   stock_code: '003200' },
+    { corp_code: '00101628', corp_name: '경방',       stock_code: '000050' },
+    { corp_code: '00147222', corp_name: '전방',       stock_code: '000950' },
+  ]},
+};
+function cmpLoadPreset(key) {
+  const preset = CMP_PRESETS[key];
+  if (!preset) return;
+  cmpList = preset.corps.slice(0, CMP_MAX).map(c => ({ ...c }));
+  renderCmpBar();
+  syncCmpButtons();
+  openCompareView();
+}
 
 // 카드 버튼 상태 동기화(재검색 없이 즉시 반영)
 function syncCmpButtons() {
